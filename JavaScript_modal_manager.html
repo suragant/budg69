@@ -1,0 +1,106 @@
+<script>
+(function(window, document){
+  'use strict';
+
+  if (window.__budgetModalManagerInstalled) return;
+  window.__budgetModalManagerInstalled = true;
+
+  function ensureBackdrop() {
+    var backdrop = document.querySelector('.modal-backdrop.app-budget');
+    if (backdrop) return backdrop;
+
+    backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop app-budget';
+    backdrop.style.display = 'none';
+    backdrop.addEventListener('click', function() {
+      try { closeAllModals(); } catch(e){}
+    });
+    document.body.appendChild(backdrop);
+    return backdrop;
+  }
+
+  function getModal(idOrEl) {
+    if (!idOrEl) return null;
+    if (typeof idOrEl === 'string') return document.getElementById(idOrEl);
+    return idOrEl.nodeType === 1 ? idOrEl : null;
+  }
+
+  function activeModals() {
+    return Array.from(document.querySelectorAll('.modal')).filter(function(el){
+      return el.classList.contains('active') || el.style.display === 'flex';
+    });
+  }
+
+  function syncBackdrop() {
+    var backdrop = ensureBackdrop();
+    backdrop.style.display = activeModals().length ? 'block' : 'none';
+  }
+
+  function openModal(idOrEl, opts) {
+    opts = opts || {};
+    var modal = getModal(idOrEl);
+    if (!modal) return false;
+
+    ensureBackdrop();
+    if (!opts.keepOthers) {
+      activeModals().forEach(function(other) {
+        if (other !== modal) closeModal(other);
+      });
+    }
+
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    if (opts.zIndex) modal.style.zIndex = String(opts.zIndex);
+    syncBackdrop();
+    return true;
+  }
+
+  function closeModal(idOrEl) {
+    var modal = getModal(idOrEl);
+    if (!modal) return false;
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    syncBackdrop();
+    return true;
+  }
+
+  function closeAllModals() {
+    Array.from(document.querySelectorAll('.modal')).forEach(function(modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden', 'true');
+    });
+    syncBackdrop();
+  }
+
+  function hideOtherModalsKeep(keepId) {
+    Array.from(document.querySelectorAll('.modal')).forEach(function(modal) {
+      if (modal.id !== keepId) {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+      }
+    });
+    syncBackdrop();
+  }
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target && e.target.closest ? e.target.closest('[data-action="close-modal"]') : null;
+    if (!btn) return;
+    var target = btn.getAttribute('data-target');
+    if (target) closeModal(target);
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' || e.key === 'Esc') closeAllModals();
+  });
+
+  window.openModal = window.openModal || openModal;
+  window.closeModal = window.closeModal || closeModal;
+  window.closeModalManaged = window.closeModalManaged || closeModal;
+  window.closeAllModals = window.closeAllModals || closeAllModals;
+  window.hideOtherModalsKeep = window.hideOtherModalsKeep || hideOtherModalsKeep;
+})(window, document);
+</script>

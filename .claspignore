@@ -1,0 +1,13 @@
+.git/**
+.github/**
+.vscode/**
+node_modules/**
+
+README*
+*.md
+
+.clasp.json
+.clasp.json.example
+
+debug.gs
+debug_relaxed.gs

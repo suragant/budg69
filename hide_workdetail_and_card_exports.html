@@ -1,0 +1,236 @@
+<script>
+// Lightweight patch: hide workDetail header-close (only) and card export buttons (only inside card contexts).
+// - Disconnects previous WD observers if present.
+// - Uses minimal observers (container-only) and delegation.
+// - Safe to run multiple times (idempotent).
+(function(window, document){
+  'use strict';
+  if (!window || !document) return;
+  // Disconnect older observers if present
+  try {
+    ['_wd_workdetail_header_close_observer','_wd_workdetail_header_close_light_modal_observer','_wd_export_hide_observer','_wd_hide_workdetail_and_card_exports_installed','_wd_hide_workdetail_and_card_exports'].forEach(n=>{
+      try { if (window[n] && typeof window[n].disconnect === 'function') { window[n].disconnect(); console.log('[LIGHT] disconnected', n); } } catch(e){}
+      try { delete window[n]; } catch(e){}
+    });
+  } catch(e){}
+
+  // configuration
+  const MODAL_ID = 'workDetailModal';
+  const WORKDETAIL_CLOSE_ID = 'workDetailClose';
+  const CARD_SELECTORS = ['#budgetContainer', '.budget-card', '.card'];
+  const HIDDEN_HEADER_CLASS = 'wd-hidden-workdetail-header-close';
+  const HIDDEN_CARD_EXPORT_CLASS = 'wd-hidden-card-export-btn';
+
+  // guard
+  if (window._wd_hide_light_installed) {
+    console.info('[LIGHT] already installed');
+    return;
+  }
+  window._wd_hide_light_installed = true;
+
+  // helper checks
+  function elText(el){ try { return (el.innerText||el.textContent||'').toString().trim(); } catch(e){ return ''; } }
+  function textLooksExport(t){ try { t=(t||'').toString().toLowerCase(); return t.includes('export') || t.includes('ส่งออก') || t.includes('pdf'); } catch(e){ return false; } }
+  function isExportLike(el){
+    if (!el) return false;
+    try {
+      const da = el.getAttribute && (el.getAttribute('data-action')||'').toLowerCase();
+      if (da && /export/.test(da)) return true;
+      return textLooksExport(elText(el));
+    } catch(e){ return false; }
+  }
+  function inAnyModal(el){ return !!(el && el.closest && (el.closest('#' + MODAL_ID) || el.closest('#dashboardModal'))); }
+  function inCardContext(el){
+    if (!el || !el.closest) return false;
+    for (const s of CARD_SELECTORS) { try { if (el.closest(s)) return true; } catch(e){} }
+    return false;
+  }
+  function inModalFooter(el){ return !!(el && el.closest && el.closest('.modal-footer')); }
+
+  // hide card export buttons in a root (only if inside card contexts)
+  function hideCardExports(root){
+    try {
+      root = root || document;
+      const candidates = Array.from(root.querySelectorAll('button, a, .btn')).filter(Boolean);
+      candidates.forEach(btn => {
+        try {
+          if (btn._wd_card_export_hidden) return;
+          if (!isExportLike(btn)) return;
+          if (inAnyModal(btn)) return; // keep modal exports
+          if (!inCardContext(btn) && btn.id !== 'dashboardExportBtn') return;
+          if (inModalFooter(btn)) return;
+          btn.style.display = 'none';
+          btn.style.visibility = 'hidden';
+          btn.classList.add(HIDDEN_CARD_EXPORT_CLASS);
+          btn._wd_card_export_hidden = true;
+        } catch(e){}
+      });
+    } catch(e){ console.warn('[LIGHT] hideCardExports failed', e); }
+  }
+
+  // hide the specific workDetail header-close button by id first, then scan modal for close-like candidates
+  function hideWorkDetailHeaderCloseOnce(){
+    try {
+      const byId = document.getElementById(WORKDETAIL_CLOSE_ID);
+      if (byId && byId.closest && byId.closest('#' + MODAL_ID)) {
+        byId.style.display = 'none'; byId.style.visibility = 'hidden'; byId.classList.add(HIDDEN_HEADER_CLASS); byId.setAttribute('aria-hidden','true'); byId._wd_hidden_by_patch = true;
+        return;
+      }
+      const modal = document.getElementById(MODAL_ID);
+      if (!modal) return;
+      const nodes = Array.from(modal.querySelectorAll('button, a, .btn, [role="button"]'));
+      nodes.forEach(el=>{
+        try {
+          if (el._wd_header_checked) return;
+          el._wd_header_checked = true;
+          if (inModalFooter(el)) return;
+          const txt = (elText(el) || '').toLowerCase();
+          const aria = (el.getAttribute && (el.getAttribute('aria-label')||'')).toString().toLowerCase();
+          const cls = (el.className||'').toString().toLowerCase();
+          if (txt === 'ปิด' || txt === 'close' || aria.includes('close') || cls.includes('modal-close') || cls.includes('btn-close')) {
+            el.style.display='none'; el.style.visibility='hidden'; el.classList.add(HIDDEN_HEADER_CLASS); el.setAttribute('aria-hidden','true'); el._wd_hidden_by_patch = true;
+          }
+        } catch(e){}
+      });
+    } catch(e){ console.warn('[LIGHT] hideWorkDetailHeaderCloseOnce failed', e); }
+  }
+
+  // install card observers only for containers that exist
+  const cardObservers = [];
+  function installCardObserversOnce(){
+    try {
+      CARD_SELECTORS.forEach(sel => {
+        try {
+          const container = document.querySelector(sel);
+          if (!container) return;
+          // initial pass
+          hideCardExports(container);
+          if (container._wd_card_observer) return;
+          // observe only childList/subtree of this container (light)
+          const mo = new MutationObserver(muts => {
+            for (const m of muts) {
+              if (m.addedNodes && m.addedNodes.length) {
+                m.addedNodes.forEach(node => {
+                  if (node.nodeType === 1) hideCardExports(node);
+                });
+              }
+            }
+          });
+          mo.observe(container, { childList: true, subtree: true });
+          container._wd_card_observer = mo;
+          cardObservers.push({container, selector: sel});
+        } catch(e){}
+      });
+    } catch(e){ console.warn('[LIGHT] installCardObserversOnce failed', e); }
+  }
+
+  // top-level minimal watcher: only observe childList at root (not subtree) so it's light; when modal appears attach modal-only observer and disconnect top-level watcher
+  let topModalObserver = null;
+  function installTopModalWatcher(){
+    try {
+      if (document.getElementById(MODAL_ID)) {
+        hideWorkDetailHeaderCloseOnce();
+        const modal = document.getElementById(MODAL_ID);
+        if (modal && !modal._wd_modal_observer) {
+          const moModal = new MutationObserver(muts => {
+            muts.forEach(m => { if (m.addedNodes && m.addedNodes.length) hideWorkDetailHeaderCloseOnce(); if (m.type === 'attributes') hideWorkDetailHeaderCloseOnce(); });
+          });
+          moModal.observe(modal, { childList:true, subtree:true, attributes:true, attributeFilter:['class','style'] });
+          modal._wd_modal_observer = moModal;
+        }
+        return;
+      }
+      if (topModalObserver) return;
+      topModalObserver = new MutationObserver(muts => {
+        for (const m of muts) {
+          if (m.addedNodes && m.addedNodes.length) {
+            m.addedNodes.forEach(node => {
+              if (node.nodeType !== 1) return;
+              // check if modal added or contains modal
+              if (node.id === MODAL_ID || (node.querySelector && node.querySelector('#' + MODAL_ID))) {
+                const modal = document.getElementById(MODAL_ID);
+                if (modal) {
+                  hideWorkDetailHeaderCloseOnce();
+                  // install modal-only observer
+                  if (!modal._wd_modal_observer) {
+                    const moModal = new MutationObserver(muts2 => {
+                      muts2.forEach(m2 => { if (m2.addedNodes && m2.addedNodes.length) hideWorkDetailHeaderCloseOnce(); if (m2.type === 'attributes') hideWorkDetailHeaderCloseOnce(); });
+                    });
+                    moModal.observe(modal, { childList:true, subtree:true, attributes:true, attributeFilter:['class','style'] });
+                    modal._wd_modal_observer = moModal;
+                  }
+                  try { topModalObserver.disconnect(); topModalObserver = null; } catch(e){}
+                }
+              }
+            });
+          }
+        }
+      });
+      topModalObserver.observe(document.documentElement || document.body, { childList: true, subtree: false });
+      window._wd_top_modal_observer = topModalObserver;
+    } catch(e){ console.warn('[LIGHT] installTopModalWatcher failed', e); }
+  }
+
+  // event delegation for save/history to survive remounts (non-invasive)
+  function installDelegatedActions(){
+    if (window._wd_delegated_actions_installed) return;
+    window._wd_delegated_actions_installed = true;
+    const container = document.getElementById('budgetContainer') || document.querySelector('.container') || document.body;
+    container.addEventListener('click', function(e){
+      const btn = e.target.closest && e.target.closest('button, a, [data-action]') || null;
+      if (!btn) return;
+      const action = (btn.getAttribute && (btn.getAttribute('data-action') || '')).toLowerCase();
+      const txt = (btn.innerText || btn.textContent || '').toString().trim().toLowerCase();
+      if (action.indexOf('save') !== -1 || txt.indexOf('บันทึก') !== -1 || txt.indexOf('save') !== -1) {
+        e.stopPropagation();
+        // try standard save functions if present
+        const fns = ['saveBudget','submitBudget','recordBudget','saveWork','saveCurrentDetail'];
+        for (const n of fns) { try { if (typeof window[n] === 'function') { window[n](btn); return; } } catch(e){} }
+        // fallback to original click
+        try { /* allow original handlers to run */ } catch(e){}
+      }
+      if (action.indexOf('history') !== -1 || txt.indexOf('ประวัติ') !== -1) {
+        e.stopPropagation();
+        const names = ['openHistory','showHistory','openWorkHistory','showWorkExpenseTypes'];
+        for (const n of names) { try { if (typeof window[n] === 'function') { window[n](btn); return; } } catch(e){} }
+      }
+    }, true);
+    console.info('[LIGHT] delegated action handlers installed');
+  }
+
+  // public restore helpers
+  window._wd_restore_workdetail_header_closes = function(){
+    try { document.querySelectorAll('.' + HIDDEN_HEADER_CLASS).forEach(el=>{ el.style.display=''; el.style.visibility=''; el.classList.remove(HIDDEN_HEADER_CLASS); el.removeAttribute('aria-hidden'); }); console.info('restored header closes'); } catch(e){}
+  };
+  window._wd_restore_card_export_buttons = function(){
+    try { document.querySelectorAll('.' + HIDDEN_CARD_EXPORT_CLASS).forEach(el=>{ el.style.display=''; el.style.visibility=''; el.classList.remove(HIDDEN_CARD_EXPORT_CLASS); }); console.info('restored card export buttons'); } catch(e){}
+  };
+  window._wd_hide_light_status = function(){ return { installed: !!window._wd_hide_light_installed, cardObservers: cardObservers.map(o=>o.selector), topModalObserver: !!topModalObserver, hiddenHeaderCount: document.querySelectorAll('.' + HIDDEN_HEADER_CLASS).length, hiddenCardExportCount: document.querySelectorAll('.' + HIDDEN_CARD_EXPORT_CLASS).length }; };
+
+  // install sequence (light)
+  try {
+    installCardObserversOnce();
+    setTimeout(installCardObserversOnce, 400); // attempt again after render
+    installTopModalWatcher();
+    setTimeout(hideWorkDetailHeaderCloseOnce, 300);
+    installDelegatedActions();
+    setTimeout(()=>console.info('[LIGHT] installed (status):', window._wd_hide_light_status()), 800);
+// ✅ เพิ่ม: re-init app ถ้ายังไม่ initialized (รวมหลัง GAS iframe reload)
+  if (!window._appInitialized) {
+    setTimeout(function() {
+      if (!window._appInitialized && typeof window._waitForGasAndLoad === 'function') {
+        console.info('[LIGHT] _appInitialized missing → re-running _waitForGasAndLoad');
+        window._appInitialized = true;  // set ก่อนเพื่อกัน call ซ้ำ
+        window._waitForGasAndLoad();
+      }
+    }, 300);
+  }
+    setTimeout(function() {
+    if (typeof window._initViewToggle === 'function') {
+      window._initViewToggle();
+    }
+  }, 350);
+  
+} catch(e){ console.error('[LIGHT] install failed', e); }
+})(window, document);
+</script>

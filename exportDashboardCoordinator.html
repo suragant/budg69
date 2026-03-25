@@ -1,0 +1,163 @@
+<script>
+(function(global){
+  'use strict';
+  const G = (typeof globalThis !== 'undefined') ? globalThis : global;
+
+  async function ensurePdfLibs() {
+    if (G.__pdfLibsPromise) return G.__pdfLibsPromise;
+    return G.__pdfLibsPromise ? G.__pdfLibsPromise : Promise.resolve(true);
+  }
+
+  async function _drawHeaderSafely(pdf, headerMeta, opts = {}) {
+    if (!headerMeta || !headerMeta.dataUrl) return false;
+    return new Promise((resolve) => {
+      try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = async () => {
+          try {
+            const PX_PER_PT = 96/72;
+            const pageWidthPt = opts.pageWidthPt || 841.89;
+            const marginPt = (typeof opts.marginPt === 'number') ? opts.marginPt : 36;
+            const maxWidthPt = pageWidthPt - marginPt * 2;
+
+            let targetWidthPt = Math.min(headerMeta.widthPt || maxWidthPt, maxWidthPt);
+            let targetHeightPt = headerMeta.heightPt || (targetWidthPt * (img.naturalHeight / img.naturalWidth || 1));
+
+            const aspect = (img.naturalHeight || 1) / (img.naturalWidth || 1);
+            if (!targetHeightPt || Math.abs(targetHeightPt - targetWidthPt * aspect) > 0.1) {
+              targetHeightPt = targetWidthPt * aspect;
+            }
+
+            const targetWidthPx = Math.max(1, Math.round(targetWidthPt * PX_PER_PT));
+            const targetHeightPx = Math.max(1, Math.round(targetHeightPt * PX_PER_PT));
+
+            const c = document.createElement('canvas');
+            c.width = targetWidthPx; c.height = targetHeightPx;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,c.width,c.height);
+            try { ctx.drawImage(img, 0, 0, c.width, c.height); } catch(e){ console.warn('_drawHeaderSafely drawImage failed', e); }
+
+            const jpeg = c.toDataURL('image/jpeg', 0.92);
+            const leftPt = Math.max(marginPt, (pageWidthPt - targetWidthPt) / 2);
+            try {
+              pdf.addImage(jpeg, 'JPEG', leftPt, marginPt, targetWidthPt, targetHeightPt);
+              resolve(true);
+            } catch(e) {
+              try {
+                const png = c.toDataURL('image/png');
+                pdf.addImage(png, 'PNG', leftPt, marginPt, targetWidthPt, targetHeightPt);
+                resolve(true);
+              } catch(err) {
+                console.error('_drawHeaderSafely final addImage failed', err);
+                resolve(false);
+              }
+            }
+          } catch(err){
+            console.error('_drawHeaderSafely inner error', err);
+            resolve(false);
+          }
+        };
+        img.onerror = () => { console.warn('_drawHeaderSafely: header image failed to load'); resolve(false); };
+        img.src = headerMeta.dataUrl;
+      } catch(e){
+        console.error('_drawHeaderSafely exception', e);
+        resolve(false);
+      }
+    });
+  }
+
+  async function exportDashboardCoordinator(opts = {}) {
+    await ensurePdfLibs();
+    try {
+      const pageWidthPt = 841.89;
+      const pageHeightPt = 595.28;
+      const marginPt = (typeof opts.marginPt === 'number') ? opts.marginPt : 36;
+      const usableHeightPt = pageHeightPt - (marginPt * 2);
+
+      // allow override from opts; keep default 0.6
+      const headerRatio = (typeof opts.headerRatio === 'number') ? opts.headerRatio : 0.6;
+      const headerTargetHeightPt = Math.max(80, Math.min(usableHeightPt * headerRatio, usableHeightPt - 40));
+
+      const contentWidthPt = pageWidthPt - marginPt*2;
+
+      const rawHeaderMeta = (typeof G.captureDashboardHeader === 'function')
+        ? await G.captureDashboardHeader({ pageWidthPt, marginPt, scale: opts.scale || undefined })
+        : null;
+
+      let headerMeta = null;
+      if (rawHeaderMeta && rawHeaderMeta.dataUrl) {
+        const rawW = rawHeaderMeta.widthPt || contentWidthPt;
+        const rawH = rawHeaderMeta.heightPt || Math.max(60, rawW * 0.3);
+        const scale = headerTargetHeightPt / (rawH || headerTargetHeightPt);
+        headerMeta = {
+          dataUrl: rawHeaderMeta.dataUrl,
+          widthPt: Math.min(contentWidthPt, rawW * scale),
+          heightPt: headerTargetHeightPt
+        };
+      } else {
+        headerMeta = { widthPt: contentWidthPt, heightPt: headerTargetHeightPt };
+      }
+
+      if (!G.jspdf || !G.jspdf.jsPDF) {
+        console.warn('exportDashboardCoordinator: jsPDF not available');
+        return { ok:false, error: 'jsPDF not available' };
+      }
+      const pdf = new (G.jspdf && G.jspdf.jsPDF)({ unit:'pt', format:'a4', orientation:'landscape' });
+
+      // header drawing with validation and optional fallback text
+      let headerDrawn = false;
+      try {
+        if (headerMeta && headerMeta.dataUrl && typeof headerMeta.dataUrl === 'string') {
+          const isDataImg = headerMeta.dataUrl.indexOf('data:image/') === 0;
+          if (!isDataImg) {
+            console.warn('exportCoordinator: headerMeta.dataUrl invalid (not data:image). Attempting recapture.');
+            if (typeof G.captureDashboardHeader === 'function') {
+              try {
+                const rec = await G.captureDashboardHeader({ pageWidthPt, marginPt, scale: Math.max(2, (window.devicePixelRatio||1)*2) });
+                if (rec && rec.dataUrl && typeof rec.dataUrl === 'string' && rec.dataUrl.indexOf('data:image/')===0) {
+                  headerMeta = { dataUrl: rec.dataUrl, widthPt: rec.widthPt || headerMeta.widthPt, heightPt: rec.heightPt || headerMeta.heightPt };
+                  console.log('exportCoordinator: recapture succeeded');
+                } else {
+                  console.warn('exportCoordinator: recapture returned invalid dataUrl');
+                }
+              } catch(e){ console.warn('exportCoordinator recapture failed', e); }
+            }
+          }
+          if (headerMeta && headerMeta.dataUrl && headerMeta.dataUrl.indexOf('data:image/')===0) {
+            try {
+              headerDrawn = await _drawHeaderSafely(pdf, headerMeta, { pageWidthPt, marginPt });
+            } catch (e) { console.warn('header safe draw failed', e); headerDrawn = false; }
+          } else {
+            console.warn('exportCoordinator: no valid header image after recapture');
+          }
+        }
+      } catch(e){ console.warn('exportCoordinator header draw wrapper error', e); headerDrawn=false; }
+
+      if (!headerDrawn) {
+        const fallbackText = (opts.headerFallbackText && String(opts.headerFallbackText)) || '📊 ระบบสารสนเทศในการบริหารงบประมาณของเทศบาลเมืองเขลางค์นคร';
+        pdf.setFontSize(18);
+        pdf.text(fallbackText, pageWidthPt/2, marginPt+14, { align:'center' });
+      }
+
+      const writerOpts = Object.assign({}, opts, { mergeFirst: true });
+      const tableResult = (typeof G.appendDashboardTablesToPdf === 'function')
+        ? await G.appendDashboardTablesToPdf(pdf, headerMeta || null, writerOpts)
+        : { ok:false, reason:'no-append-function' };
+
+      const fileName = opts.fileName || 'Dashboard_Full_Landscape.pdf';
+      pdf.save(fileName);
+
+      if (opts.debug) console.log('exportDashboardCoordinator: done', { headerMeta, tableResult });
+
+      return { ok: true, tableResult };
+    } catch (err) {
+      console.error('exportDashboardCoordinator failed', err);
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  if (!G.exportDashboardCoordinator) G.exportDashboardCoordinator = exportDashboardCoordinator;
+
+})(window);
+</script>

@@ -1,0 +1,496 @@
+<!--
+  TransferBudgetModal.html (v2)
+  การเปลี่ยนแปลง:
+  1. ทุก role ใช้ได้ — โอนได้เฉพาะรายการที่ตัวเองมีสิทธิ์ (hasAccessToRow)
+  2. ปุ่มโอนงบใช้ style เหมือนปุ่มอื่นใน header (.btn .btn-secondary)
+  3. dropdown cascade: แผนงาน → ประเภทรายจ่าย → รายการ (แยกฝั่ง From/To)
+  วิธีใช้: แทนที่ <?!= include('TransferBudgetModal'); ?> ใน Index.html
+-->
+
+<!-- Backdrop -->
+<div id="transferBackdrop"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);
+         backdrop-filter:blur(3px);z-index:10060;"></div>
+
+<!-- Modal -->
+<div id="transferModal" role="dialog" aria-modal="true" aria-labelledby="transferModalTitle"
+  style="display:none;position:fixed;inset:0;z-index:10061;
+         align-items:center;justify-content:center;padding:16px;">
+
+  <div style="background:#fff;border-radius:14px;width:100%;max-width:620px;
+              box-shadow:0 16px 48px rgba(0,0,0,0.18);overflow:hidden;
+              font-family:'Sarabun',Arial,sans-serif;">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                padding:18px 24px;border-bottom:1px solid #eee;
+                background:linear-gradient(135deg,#667eea,#764ba2);">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:22px;">⇄</span>
+        <div>
+          <div id="transferModalTitle" style="font-size:16px;font-weight:700;color:#fff;">โอนงบประมาณ</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:1px;">
+            เลือกรายการต้นทางและปลายทางที่ต้องการโอน
+          </div>
+        </div>
+      </div>
+      <button id="btnCloseTransfer" type="button" aria-label="ปิด"
+        style="width:30px;height:30px;background:rgba(255,255,255,0.15);border:none;
+               border-radius:7px;color:#fff;cursor:pointer;font-size:16px;
+               display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+
+    <!-- Form view -->
+    <div id="transferFormView" style="padding:20px 24px;">
+
+      <!-- Error banner -->
+      <div id="trErrorBanner"
+        style="display:none;padding:10px 14px;border-radius:8px;font-size:13px;
+               margin-bottom:14px;background:#fce4ec;border:1px solid #f48fb1;
+               color:#c62828;align-items:flex-start;gap:8px;">
+        <span>⚠</span><span id="trErrorMsg"></span>
+      </div>
+
+      <!-- Grid: FROM / Arrow / TO -->
+      <div style="display:grid;grid-template-columns:1fr 36px 1fr;align-items:start;gap:0;margin-bottom:18px;">
+
+        <!-- FROM -->
+        <div style="background:#fff5f5;border:1.5px solid #ef9a9a;border-radius:10px;padding:14px;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+                      color:#c62828;margin-bottom:10px;">ต้นทาง (From)</div>
+
+          <label style="display:block;font-size:11px;color:#666;margin-bottom:3px;">แผนงาน</label>
+          <select id="trFromWork"
+            style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:7px;
+                   font-size:12px;background:#fff;margin-bottom:8px;font-family:'Sarabun',Arial,sans-serif;">
+            <option value="">— เลือกแผนงาน —</option>
+          </select>
+
+          <label style="display:block;font-size:11px;color:#666;margin-bottom:3px;">ประเภทรายจ่าย</label>
+          <select id="trFromBudgetType" disabled
+            style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:7px;
+                   font-size:12px;background:#f9f9f9;margin-bottom:8px;font-family:'Sarabun',Arial,sans-serif;">
+            <option value="">— เลือกประเภท —</option>
+          </select>
+
+          <label style="display:block;font-size:11px;color:#666;margin-bottom:3px;">รายการ</label>
+          <select id="trFromId" disabled
+            style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:7px;
+                   font-size:12px;background:#f9f9f9;font-family:'Sarabun',Arial,sans-serif;">
+            <option value="">— เลือกรายการ —</option>
+          </select>
+
+          <div id="trFromInfo"
+            style="display:none;margin-top:8px;padding:8px 10px;background:#fff;
+                   border:1px solid #eee;border-radius:7px;font-size:12px;color:#666;">
+            คงเหลือ: <b id="trFromRemaining" style="color:#c62828;">—</b> ฿ &nbsp;|&nbsp;
+            เบิกไป: <b id="trFromUsed" style="color:#888;">—</b> ฿
+          </div>
+        </div>
+
+        <!-- Arrow -->
+        <div style="display:flex;align-items:center;justify-content:center;
+                    padding-top:60px;color:#667eea;font-size:22px;">→</div>
+
+        <!-- TO -->
+        <div style="background:#f0fff8;border:1.5px solid #80cbc4;border-radius:10px;padding:14px;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+                      color:#00695c;margin-bottom:10px;">ปลายทาง (To)</div>
+
+          <label style="display:block;font-size:11px;color:#666;margin-bottom:3px;">แผนงาน</label>
+          <select id="trToWork"
+            style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:7px;
+                   font-size:12px;background:#fff;margin-bottom:8px;font-family:'Sarabun',Arial,sans-serif;">
+            <option value="">— เลือกแผนงาน —</option>
+          </select>
+
+          <label style="display:block;font-size:11px;color:#666;margin-bottom:3px;">ประเภทรายจ่าย</label>
+          <select id="trToBudgetType" disabled
+            style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:7px;
+                   font-size:12px;background:#f9f9f9;margin-bottom:8px;font-family:'Sarabun',Arial,sans-serif;">
+            <option value="">— เลือกประเภท —</option>
+          </select>
+
+          <label style="display:block;font-size:11px;color:#666;margin-bottom:3px;">รายการ</label>
+          <select id="trToId" disabled
+            style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:7px;
+                   font-size:12px;background:#f9f9f9;font-family:'Sarabun',Arial,sans-serif;">
+            <option value="">— เลือกรายการ —</option>
+          </select>
+
+          <div id="trToInfo"
+            style="display:none;margin-top:8px;padding:8px 10px;background:#fff;
+                   border:1px solid #eee;border-radius:7px;font-size:12px;color:#666;">
+            คงเหลือ: <b id="trToRemaining" style="color:#00695c;">—</b> ฿ &nbsp;|&nbsp;
+            เบิกไป: <b id="trToUsed" style="color:#888;">—</b> ฿
+          </div>
+        </div>
+      </div>
+
+      <!-- Amount -->
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:6px;" for="trAmount">
+          จำนวนเงินที่โอน (บาท) <span style="color:#c62828;">*</span>
+        </label>
+        <div style="position:relative;">
+          <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);
+                       font-size:13px;color:#999;">฿</span>
+          <input type="number" id="trAmount" placeholder="0.00" min="1" step="0.01" autocomplete="off"
+            style="width:100%;padding:9px 12px 9px 30px;border:1.5px solid #ddd;border-radius:8px;
+                   font-size:14px;font-family:'Sarabun',Arial,sans-serif;box-sizing:border-box;">
+        </div>
+      </div>
+
+      <!-- Reason -->
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:6px;" for="trReason">
+          เหตุผลการโอนงบ <span style="color:#c62828;">*</span>
+        </label>
+        <input type="text" id="trReason" maxlength="200" autocomplete="off"
+          placeholder="เช่น โอนงบเพิ่มเติมตามมติที่ประชุม ครั้งที่ 3/2568"
+          style="width:100%;padding:9px 12px;border:1.5px solid #ddd;border-radius:8px;
+                 font-size:13px;font-family:'Sarabun',Arial,sans-serif;box-sizing:border-box;">
+      </div>
+
+      <!-- Preview -->
+      <div id="trPreview"
+        style="display:none;background:#f8f9fe;border:1px solid #c5cae9;border-radius:10px;
+               padding:12px 16px;margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;color:#667eea;letter-spacing:.06em;
+                    text-transform:uppercase;margin-bottom:8px;">Preview — ผลหลังโอน</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:13px;">
+          <div style="color:#888;">ต้นทาง — งบหลังโอน</div>
+          <div id="trPrevFromBudget" style="text-align:right;font-weight:600;color:#c62828;">—</div>
+          <div style="color:#888;">ต้นทาง — คงเหลือหลังโอน</div>
+          <div id="trPrevFromRem"    style="text-align:right;font-weight:600;color:#c62828;">—</div>
+          <div style="color:#888;">ปลายทาง — งบหลังโอน</div>
+          <div id="trPrevToBudget"   style="text-align:right;font-weight:600;color:#00695c;">—</div>
+          <div style="color:#888;">ปลายทาง — คงเหลือหลังโอน</div>
+          <div id="trPrevToRem"      style="text-align:right;font-weight:600;color:#00695c;">—</div>
+        </div>
+      </div>
+
+      <!-- Footer buttons -->
+      <div style="display:flex;gap:10px;justify-content:flex-end;
+                  padding-top:16px;border-top:1px solid #eee;">
+        <button id="btnCancelTransfer" type="button"
+          class="btn btn-secondary" style="margin:0;">
+          ยกเลิก
+        </button>
+        <button id="btnConfirmTransfer" type="button" disabled
+          class="btn btn-primary" style="margin:0;opacity:.45;cursor:not-allowed;">
+          <span id="btnConfirmLabel">ยืนยันการโอน</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Success view -->
+    <div id="transferSuccessView"
+      style="display:none;padding:32px 24px;text-align:center;">
+      <div style="width:64px;height:64px;margin:0 auto 16px;
+                  background:rgba(76,175,80,0.1);border:2px solid #a5d6a7;
+                  border-radius:50%;display:flex;align-items:center;
+                  justify-content:center;font-size:28px;">✓</div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:6px;color:#222;">โอนงบสำเร็จ</div>
+      <div id="trSuccessAmount"
+        style="font-size:22px;font-weight:700;color:#4CAF50;margin:12px 0 4px;"></div>
+      <div style="font-size:12px;color:#888;display:flex;align-items:center;
+                  justify-content:center;gap:8px;flex-wrap:wrap;">
+        <span id="trSuccessFrom" style="color:#c62828;font-weight:600;"></span>
+        <span style="color:#667eea;">→</span>
+        <span id="trSuccessTo"   style="color:#00695c;font-weight:600;"></span>
+      </div>
+      <div id="trSuccessDetail" style="font-size:13px;color:#888;margin-top:10px;"></div>
+      <button id="btnSuccessDone" type="button"
+        class="btn btn-secondary" style="margin-top:20px;">
+        ปิด
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const $   = id => document.getElementById(id);
+  const fmt = n  => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  let _items   = [];
+  let _loading = false;
+
+  /* ── unique values helper ─────────────────────────────────── */
+  function unique(arr) {
+    return arr.filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+  }
+
+  /* ── populate Work dropdown ───────────────────────────────── */
+  function buildWorkDropdowns() {
+    var works = unique(_items.map(function (i) { return i.work || ''; })).sort();
+    ['trFromWork', 'trToWork'].forEach(function (selId) {
+      var sel = $(selId);
+      while (sel.options.length > 1) sel.remove(1);
+      works.forEach(function (w) {
+        var opt = document.createElement('option');
+        opt.value = w; opt.textContent = w;
+        sel.appendChild(opt);
+      });
+    });
+  }
+
+  /* ── populate BudgetType dropdown based on work ──────────── */
+  function buildBudgetTypeDropdown(workVal, btSelId, idSelId) {
+    var btSel = $(btSelId);
+    var idSel = $(idSelId);
+    while (btSel.options.length > 1) btSel.remove(1);
+    while (idSel.options.length > 1) idSel.remove(1);
+    idSel.disabled = true;
+
+    if (!workVal) { btSel.disabled = true; return; }
+
+    var types = unique(
+      _items
+        .filter(function (i) { return (i.work || '') === workVal; })
+        .map(function (i) { return i.budgetType || 'ไม่ระบุ'; })
+    ).sort();
+
+    types.forEach(function (t) {
+      var opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      btSel.appendChild(opt);
+    });
+    btSel.disabled = false;
+  }
+
+  /* ── populate Item dropdown based on work + budgetType ────── */
+  function buildItemDropdown(workVal, btVal, idSelId) {
+    var idSel = $(idSelId);
+    while (idSel.options.length > 1) idSel.remove(1);
+
+    if (!workVal || !btVal) { idSel.disabled = true; return; }
+
+    var filtered = _items.filter(function (i) {
+      return (i.work || '') === workVal &&
+             (i.budgetType || 'ไม่ระบุ') === btVal;
+    });
+
+    filtered.forEach(function (item) {
+      var id  = item.itemId || item.rowIndex || '';
+      var lbl = [id, item.item || item.work].filter(Boolean).join(' — ');
+      var opt = document.createElement('option');
+      opt.value = id; opt.textContent = lbl;
+      idSel.appendChild(opt);
+    });
+    idSel.disabled = filtered.length === 0;
+  }
+
+  /* ── find item by id ──────────────────────────────────────── */
+  function _find(id) {
+    return _items.find(function (i) {
+      return (i.itemId || i.rowIndex || '') === id;
+    }) || null;
+  }
+
+  /* ── update info panel ────────────────────────────────────── */
+  function updateInfo(itemId, remainId, usedId, infoId) {
+    var item = _find(itemId);
+    if (!item) { $(infoId).style.display = 'none'; return; }
+    $(remainId).textContent = fmt(item.remaining);
+    $(usedId).textContent   = fmt(item.used);
+    $(infoId).style.display = 'block';
+  }
+
+  /* ── preview ──────────────────────────────────────────────── */
+  function updatePreview() {
+    var fromId = $('trFromId').value;
+    var toId   = $('trToId').value;
+    var amt    = parseFloat($('trAmount').value) || 0;
+    var from   = _find(fromId);
+    var to     = _find(toId);
+
+    _hideError();
+    $('trAmount').style.borderColor = '';
+    $('trPreview').style.display = 'none';
+    _setConfirm(false);
+
+    if (!from || !to || amt <= 0 || fromId === toId) return;
+
+    if (amt > (from.remaining || 0)) {
+      _showError('งบคงเหลือต้นทางไม่เพียงพอ — มีเพียง ' + fmt(from.remaining) + ' ฿');
+      $('trAmount').style.borderColor = '#f44336';
+      return;
+    }
+
+    $('trPrevFromBudget').textContent = fmt((from.budget    || 0) - amt) + ' ฿';
+    $('trPrevFromRem').textContent    = fmt((from.remaining || 0) - amt) + ' ฿';
+    $('trPrevToBudget').textContent   = fmt((to.budget      || 0) + amt) + ' ฿';
+    $('trPrevToRem').textContent      = fmt((to.remaining   || 0) + amt) + ' ฿';
+    $('trPreview').style.display = 'block';
+    _setConfirm(!!$('trReason').value.trim());
+  }
+
+  /* ── open / close ─────────────────────────────────────────── */
+  function openTransferModal(items) {
+    _items = items || (window.State && window.State.allItems) || [];
+    _resetForm();
+    buildWorkDropdowns();
+    $('transferBackdrop').style.display = 'block';
+    $('transferModal').style.display    = 'flex';
+    $('trFromWork').focus();
+  }
+
+  function closeTransferModal() {
+    $('transferBackdrop').style.display = 'none';
+    $('transferModal').style.display    = 'none';
+    setTimeout(_resetForm, 150);
+  }
+
+  /* ── reset ────────────────────────────────────────────────── */
+  function _resetForm() {
+    try {
+      $('transferFormView').style.display    = '';
+      $('transferSuccessView').style.display = 'none';
+      _hideError();
+      $('trPreview').style.display = 'none';
+      $('trFromInfo').style.display = 'none';
+      $('trToInfo').style.display   = 'none';
+
+      ['trFromWork','trFromBudgetType','trFromId',
+       'trToWork','trToBudgetType','trToId',
+       'trAmount','trReason'].forEach(function (id) {
+        $(id).value = '';
+      });
+      $('trFromBudgetType').disabled = true;
+      $('trFromId').disabled         = true;
+      $('trToBudgetType').disabled   = true;
+      $('trToId').disabled           = true;
+      $('trAmount').style.borderColor = '';
+      _setConfirm(false);
+      _setBtnLoading(false);
+    } catch (e) {}
+  }
+
+  /* ── cascade: From ────────────────────────────────────────── */
+  $('trFromWork').addEventListener('change', function () {
+    buildBudgetTypeDropdown(this.value, 'trFromBudgetType', 'trFromId');
+    $('trFromInfo').style.display = 'none';
+    updatePreview();
+  });
+  $('trFromBudgetType').addEventListener('change', function () {
+    buildItemDropdown($('trFromWork').value, this.value, 'trFromId');
+    $('trFromInfo').style.display = 'none';
+    updatePreview();
+  });
+  $('trFromId').addEventListener('change', function () {
+    updateInfo(this.value, 'trFromRemaining', 'trFromUsed', 'trFromInfo');
+    updatePreview();
+  });
+
+  /* ── cascade: To ──────────────────────────────────────────── */
+  $('trToWork').addEventListener('change', function () {
+    buildBudgetTypeDropdown(this.value, 'trToBudgetType', 'trToId');
+    $('trToInfo').style.display = 'none';
+    updatePreview();
+  });
+  $('trToBudgetType').addEventListener('change', function () {
+    buildItemDropdown($('trToWork').value, this.value, 'trToId');
+    $('trToInfo').style.display = 'none';
+    updatePreview();
+  });
+  $('trToId').addEventListener('change', function () {
+    updateInfo(this.value, 'trToRemaining', 'trToUsed', 'trToInfo');
+    updatePreview();
+  });
+
+  $('trAmount').addEventListener('input',  updatePreview);
+  $('trReason').addEventListener('input',  function () {
+    _setConfirm(
+      !!$('trFromId').value && !!$('trToId').value &&
+      (parseFloat($('trAmount').value) || 0) > 0 &&
+      !!this.value.trim()
+    );
+  });
+
+  /* ── submit ───────────────────────────────────────────────── */
+  $('btnConfirmTransfer').addEventListener('click', function () {
+    if (_loading) return;
+    var fromId = $('trFromId').value.trim();
+    var toId   = $('trToId').value.trim();
+    var amt    = parseFloat($('trAmount').value) || 0;
+    var reason = $('trReason').value.trim();
+    var from   = _find(fromId);
+
+    if (!fromId || !toId || amt <= 0 || !reason) return;
+    if (fromId === toId) { _showError('ต้นทางและปลายทางต้องไม่ใช่รายการเดียวกัน'); return; }
+    if (from && amt > (from.remaining || 0)) { _showError('จำนวนเงินเกินงบคงเหลือต้นทาง'); return; }
+
+    _setBtnLoading(true);
+    _hideError();
+
+    if (window.google && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          _setBtnLoading(false);
+          if (res && res.success) _showSuccess(res, fromId, toId, amt);
+          else _showError((res && res.message) || 'เกิดข้อผิดพลาด');
+        })
+        .withFailureHandler(function (err) {
+          _setBtnLoading(false);
+          _showError(String(err));
+        })
+        .transferBudget(fromId, toId, amt, reason);
+    } else {
+      setTimeout(function () {
+        _setBtnLoading(false);
+        _showSuccess({ message: 'โอนงบสำเร็จ (demo)' }, fromId, toId, amt);
+      }, 1200);
+    }
+  });
+
+  /* ── success ──────────────────────────────────────────────── */
+  function _showSuccess(res, fromId, toId, amt) {
+    $('transferFormView').style.display    = 'none';
+    $('transferSuccessView').style.display = 'block';
+    $('trSuccessAmount').textContent = '฿ ' + fmt(amt);
+    $('trSuccessFrom').textContent   = fromId;
+    $('trSuccessTo').textContent     = toId;
+    $('trSuccessDetail').textContent = res.message || '';
+    if (typeof window.loadData === 'function') window.loadData();
+  }
+
+  /* ── DOM helpers ──────────────────────────────────────────── */
+  function _showError(msg) {
+    $('trErrorMsg').textContent = msg;
+    $('trErrorBanner').style.display = 'flex';
+  }
+  function _hideError() { $('trErrorBanner').style.display = 'none'; }
+
+  function _setConfirm(on) {
+    var btn = $('btnConfirmTransfer');
+    btn.disabled      = !on;
+    btn.style.opacity = on ? '1' : '.45';
+    btn.style.cursor  = on ? 'pointer' : 'not-allowed';
+  }
+  function _setBtnLoading(on) {
+    _loading = on;
+    $('btnConfirmTransfer').disabled      = on;
+    $('btnConfirmTransfer').style.opacity = on ? '.45' : '1';
+    $('btnConfirmLabel').textContent      = on ? '⏳ กำลังโอน...' : 'ยืนยันการโอน';
+  }
+
+  /* ── close buttons ────────────────────────────────────────── */
+  $('btnCloseTransfer').addEventListener('click',  closeTransferModal);
+  $('btnCancelTransfer').addEventListener('click', closeTransferModal);
+  $('btnSuccessDone').addEventListener('click',    closeTransferModal);
+  $('transferBackdrop').addEventListener('click',  closeTransferModal);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && $('transferModal').style.display === 'flex') closeTransferModal();
+  });
+
+  window.openTransferModal  = openTransferModal;
+  window.closeTransferModal = closeTransferModal;
+
+  console.log('✅ TransferBudgetModal v2 loaded');
+})();
+</script>

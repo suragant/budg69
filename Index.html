@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <meta name="description" content="ระบบสารสนเทศในการบริหารงบประมาณ">
+  <title>ระบบสารสนเทศในการบริหารงบประมาณ</title>
+
+  <!-- SAFE IFRAME-WRITE SHIM -->
+  <script nonce="SSR2ii5fRwtNJngHlEUxow">
+  (function(){
+    'use strict';
+
+    const SAFE_IFRAME_WHITELIST = ['userHtmlFrame', 'reportFrame', 'previewFrame'];
+
+    try {
+      if (Document.prototype.__patched_for_userHtmlFrame_write) return;
+
+      const OrigDocWrite = Document.prototype.write;
+      const OrigDocOpen = Document.prototype.open;
+      const OrigDocClose = Document.prototype.close;
+
+      function isFullHtmlString(s) {
+        if (!s || typeof s !== 'string') return false;
+        const t = s.trim().toLowerCase();
+        return t.startsWith('<!doctype') ||
+               t.startsWith('<html') ||
+               /<head[\s\S]*?>/i.test(s) ||
+               /<body[\s\S]*?>/i.test(s);
+      }
+
+      function isWhitelistedIframeId(id) {
+        if (!id || typeof id !== 'string') return false;
+        return SAFE_IFRAME_WHITELIST.includes(id) && /^[a-zA-Z0-9_-]+$/.test(id);
+      }
+
+      Document.prototype.write = function(...args) {
+        try {
+          if (this === window.document) {
+            return OrigDocWrite.apply(this, args);
+          }
+
+          var win = this.defaultView || this.parentWindow;
+          var frame = win && win.frameElement;
+
+          if (!frame || !frame.id) {
+            return OrigDocWrite.apply(this, args);
+          }
+
+          if (!isWhitelistedIframeId(frame.id)) {
+            console.warn('Attempted write to non-whitelisted iframe:', frame.id);
+            return OrigDocWrite.apply(this, args);
+          }
+
+          var first = args.length > 0 ? args[0] : '';
+          if (typeof first === 'string' && isFullHtmlString(first)) {
+            try {
+              if ('srcdoc' in frame) {
+                frame.srcdoc = first;
+                frame.addEventListener('load', function _onLoad(){
+                  try { frame.title = frame.title || ''; } catch(e){}
+                  frame.removeEventListener('load', _onLoad);
+                }, { once: true });
+                return;
+              }
+
+              var blob = new Blob([first], { type: 'text/html; charset=utf-8' });
+              var url = URL.createObjectURL(blob);
+              frame.src = url;
+              setTimeout(function(){
+                try { URL.revokeObjectURL(url); } catch(e){}
+              }, 60000);
+              return;
+            } catch (e) {
+              console.warn('safe iframe write attempt failed:', e);
+            }
+          }
+        } catch (e) {
+          console.error('Document.prototype.write shim error:', e);
+        }
+        return OrigDocWrite.apply(this, args);
+      };
+
+      Document.prototype.open = function() {
+        try {
+          var win = this.defaultView || this.parentWindow;
+          var frame = win && win.frameElement;
+          if (frame && isWhitelistedIframeId(frame.id)) return;
+        } catch(e){}
+        return OrigDocOpen.apply(this, arguments);
+      };
+
+      Document.prototype.close = function() {
+        try {
+          var win = this.defaultView || this.parentWindow;
+          var frame = win && win.frameElement;
+          if (frame && isWhitelistedIframeId(frame.id)) return;
+        } catch(e){}
+        return OrigDocClose.apply(this, arguments);
+      };
+
+      Document.prototype.__patched_for_userHtmlFrame_write = true;
+      console.info('Safe Document.prototype.write shim installed for iframe whitelisting');
+    } catch (err) {
+      console.error('Failed to install safe iframe write shim:', err);
+    }
+  })();
+  </script>
+
+  <!-- SAFE INITCLIENT STUB -->
+  <script nonce="SSR2ii5fRwtNJngHlEUxow">
+  (function(){
+    'use strict';
+    if (window.initSupportClient && window.initSupportClient.__isReal) return;
+    if (window.initSupportClient && window.initSupportClient.__isStub) return;
+
+    window.initSupportClient = function initSupportClient_stub() {
+      if (initSupportClient_stub.__running) return;
+      initSupportClient_stub.__running = true;
+      var attempts = 0;
+      var tid = setInterval(function(){
+        attempts++;
+        if (typeof window.loadSupportItemsList === 'function') {
+          try { window.loadSupportItemsList(); } catch(e){
+            console.warn('initSupportClient_stub: loadSupportItemsList threw', e);
+          }
+          clearInterval(tid);
+          initSupportClient_stub.__running = false;
+          return;
+        }
+        if (typeof window.initSupportClient === 'function' &&
+            window.initSupportClient !== initSupportClient_stub &&
+            window.initSupportClient.__isReal) {
+          try { window.initSupportClient(); } catch(e){
+            console.warn('initSupportClient_stub: calling real init failed', e);
+          }
+          clearInterval(tid);
+          initSupportClient_stub.__running = false;
+          return;
+        }
+        if (attempts > 60) {
+          clearInterval(tid);
+          initSupportClient_stub.__running = false;
+          console.warn('initSupportClient_stub: timed out waiting for real implementation');
+        }
+      }, 200);
+    };
+
+    window.initSupportClient.__isStub = true;
+    console.log('initSupportClient stub installed early');
+  })();
+  </script>
+
+  <!-- SAFE EVENT INTERCEPTION -->
+  <script nonce="SSR2ii5fRwtNJngHlEUxow">
+  (function(){
+    'use strict';
+
+    if (window.__support_pointer_intercept_installed) return;
+    window.__support_pointer_intercept_installed = true;
+
+    const SAFE_CONTAINER_IDS = ['supportBudgetContainer', 'budgetContainer'];
+
+    function isValidContainer(elem) {
+      if (!elem || !(elem instanceof HTMLElement)) return false;
+      if (!document.body.contains(elem)) return false;
+      if (elem.closest('iframe')) return false;
+      if (elem.tagName.match(/^(FORM|INPUT|TEXTAREA|SELECT)$/i)) return false;
+      return true;
+    }
+
+    function resolveContainerSafely() {
+      try {
+        if (window._supportBudgetContainerId) {
+          const customId = String(window._supportBudgetContainerId).trim();
+          if (/^[a-zA-Z0-9_-]+$/.test(customId)) {
+            const elem = document.getElementById(customId);
+            if (isValidContainer(elem)) return elem;
+          }
+        }
+
+        for (const id of SAFE_CONTAINER_IDS) {
+          const elem = document.getElementById(id);
+          if (isValidContainer(elem)) return elem;
+        }
+      } catch (e) {
+        console.warn('resolveContainerSafely error:', e);
+      }
+      return null;
+    }
+
+    function findActionButton(target) {
+      if (!target) return null;
+      const actionBtn = target.closest ? target.closest('[data-action], .record-btn, .support-record, [data-id]') : null;
+      if (!actionBtn) return null;
+
+      const btnId = actionBtn.getAttribute('data-id') || actionBtn.getAttribute('data-item-id');
+      if (btnId && !/^[a-zA-Z0-9\-_. ]*$/.test(btnId)) {
+        console.warn('Invalid button ID format:', btnId);
+        return null;
+      }
+      return actionBtn;
+    }
+
+    function handleActionForBtn(btn) {
+      if (!btn) return false;
+
+      const id = btn.getAttribute('data-id') ||
+                 btn.getAttribute('data-item-id') ||
+                 (btn.closest && btn.closest('.budget-card') && btn.closest('.budget-card').getAttribute('data-item-id'));
+
+      if (btn.matches && (btn.matches('[data-action="view-history"]') ||
+                          btn.classList.contains('btn-history') ||
+                          btn.classList.contains('support-history'))) {
+        try {
+          if (typeof openHistoryModal === 'function') {
+            openHistoryModal(id);
+            return true;
+          }
+        } catch (e) {
+          console.warn('openHistoryModal error:', e);
+        }
+        try {
+          if (typeof window.openHistory === 'function') {
+            window.openHistory(id);
+            return true;
+          }
+        } catch (e) {
+          console.warn('openHistory error:', e);
+        }
+        return true;
+      }
+
+      if (btn.matches && (btn.matches('[data-action="open-expense"]') ||
+                          btn.matches('.record-btn') ||
+                          btn.classList.contains('support-record') ||
+                          btn.matches('[data-action="record"]'))) {
+        try {
+          if (typeof hideOtherModalsKeep === 'function') {
+            hideOtherModalsKeep('supportExpenseModal');
+          }
+        } catch(e){}
+        try {
+          if (typeof openSupportExpenseModal === 'function') {
+            return openSupportExpenseModal(id, '');
+          }
+        } catch (e) {
+          console.warn('openSupportExpenseModal error:', e);
+        }
+        try {
+          if (typeof openExpense === 'function') {
+            return openExpense(id);
+          }
+        } catch (e) {
+          console.warn('openExpense error:', e);
+        }
+        return true;
+      }
+
+      return false;
+    }
+
+    function captureHandler(e) {
+      try {
+        const container = resolveContainerSafely();
+        if (!container) return;
+
+        const btn = findActionButton(e.target);
+        if (!btn || !container.contains(btn)) return;
+
+        const handled = handleActionForBtn(btn);
+        if (handled) {
+          try {
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.stopPropagation) e.stopPropagation();
+            if (e.preventDefault) e.preventDefault();
+          } catch(_){}
+        }
+      } catch (err) {
+        console.warn('support_pointer_intercept error:', err);
+      }
+    }
+
+    document.addEventListener('pointerdown', captureHandler, true);
+    document.addEventListener('touchstart', captureHandler, true);
+    document.addEventListener('click', captureHandler, false);
+
+    console.log('Safe event interception installed with container validation');
+  })();
+  </script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <h1>ระบบสารสนเทศในการบริหารงบประมาณ</h1>
+          <div id="userEmail" style="font-size: 14px; color: #666;" aria-live="polite" aria-label="อีเมลผู้ใช้">
+            กำลังโหลด...
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <div id="alertBadge" style="position: relative; display: none;">
+            <button class="btn btn-secondary" data-action="show-alerts" aria-label="แสดงแจ้งเตือน" aria-pressed="false" id="alertsButton" style="position: relative;">
+              แจ้งเตือน
+              <span id="alertCount" aria-live="polite" aria-atomic="true" style="position: absolute; top: -8px; right: -8px; background: #ff4444; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;"></span>
+            </button>
+          </div>
+
+          <button class="btn btn-primary" data-action="show-dashboard" aria-label="แสดง Dashboard">
+            Dashboard
+          </button>
+
+          <button class="btn btn-secondary" data-action="open-transfer" id="transferBudgetBtn" style="display:none;" aria-label="โอนงบประมาณ">
+            โอนงบ
+          </button>
+
+          <button class="btn btn-secondary" data-action="logout" aria-label="ออกจากระบบ">
+            ออกจากระบบ
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="loadingDiv" class="loading" role="status" aria-live="assertive" aria-label="กำลังโหลดข้อมูล">
+      กำลังโหลดข้อมูล...
+    </div>
+
+    <div id="errorContainer" style="display: none;" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
+    <div id="searchFilterSection" class="search-filter-section" style="display: none;">
+      <div class="search-grid">
+        <div class="search-field">
+          <label class="search-label" for="searchItemId">ค้นหา Item ID</label>
+          <input type="text" id="searchItemId" class="search-input" placeholder="เช่น BG69-001" aria-label="ค้นหา Item ID">
+        </div>
+
+        <div class="search-field">
+          <label class="search-label" for="searchItem">ค้นหารายการ</label>
+          <input type="text" id="searchItem" class="search-input" placeholder="ชื่อรายการ" aria-label="ค้นหารายการ">
+        </div>
+
+        <div class="search-field">
+          <label class="search-label" for="searchWork">ค้นหางาน</label>
+          <input type="text" id="searchWork" class="search-input" placeholder="ชื่องาน" aria-label="ค้นหางาน">
+        </div>
+
+        <div class="search-field">
+          <label class="search-label" for="searchDepartment">ค้นหาหน่วยงาน</label>
+          <input type="text" id="searchDepartment" class="search-input" placeholder="สำนัก/กอง" aria-label="ค้นหาหน่วยงาน">
+        </div>
+      </div>
+
+      <div class="filter-controls">
+        <div class="filter-group">
+          <label class="filter-label" for="budgetStatusFilter">สถานะงบประมาณ:</label>
+          <select id="budgetStatusFilter" class="filter-select" aria-label="ตัวกรองสถานะงบประมาณ">
+            <option value="all">ทั้งหมด</option>
+            <option value="available">ยังเหลืองบ (&lt;80%)</option>
+            <option value="warning">ใกล้หมดงบ (80-89%)</option>
+            <option value="critical">เกือบหมด (>=90%)</option>
+            <option value="depleted">หมดงบแล้ว</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label" for="sortFilter">เรียงตาม:</label>
+          <select id="sortFilter" class="filter-select" aria-label="เรียงลำดับ">
+            <option value="default">ค่าเริ่มต้น</option>
+            <option value="budget-desc">งบประมาณ (มาก-น้อย)</option>
+            <option value="budget-asc">งบประมาณ (น้อย-มาก)</option>
+            <option value="used-desc">เบิกจ่าย (มาก-น้อย)</option>
+            <option value="used-asc">เบิกจ่าย (น้อย-มาก)</option>
+            <option value="remaining-desc">คงเหลือ (มาก-น้อย)</option>
+            <option value="remaining-asc">คงเหลือ (น้อย-มาก)</option>
+            <option value="percent-desc">% การใช้ (มาก-น้อย)</option>
+          </select>
+        </div>
+
+        <button class="btn btn-secondary" data-action="reset-filters" aria-label="ล้างตัวกรองทั้งหมด" style="margin-left: auto;">
+          ล้างตัวกรอง
+        </button>
+      </div>
+
+      <div class="filter-summary">
+        <span id="filterResultCount" aria-live="polite" aria-atomic="true">แสดง 0 รายการ</span>
+        <span id="filterWarning" style="display: none; color: #FF9800; margin-left: 15px;" role="alert">
+          <span id="warningCount">0</span> รายการใกล้หมดงบ
+        </span>
+      </div>
+    </div>
+
+    <div id="budgetContainer" class="budget-grid" style="display: none;" role="region" aria-label="รายการงบประมาณ" aria-live="polite"></div>
+  </div>
+
+  <div id="expenseModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="expenseModalTitle">บันทึกการเบิกจ่าย</h2>
+        <div id="modalDetails" style="color: #666; font-size: 14px; margin-top: 5px;"></div>
+      </div>
+
+      <div id="expenseFormErrors" style="display: none; padding: 10px; background: #fee; border: 1px solid #f99; border-radius: 4px; margin-bottom: 15px; color: #c00;" role="alert" aria-live="assertive"></div>
+
+      <form id="expenseForm" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="expenseDate">วันที่เบิกจ่าย *</label>
+          <input type="date" id="expenseDate" class="form-input" required aria-describedby="expenseDateError" aria-label="วันที่เบิกจ่าย">
+          <div id="expenseDateError" class="form-error" role="alert"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="expenseAmount">จำนวนเงิน (บาท) *</label>
+          <input type="number" id="expenseAmount" class="form-input" required min="0.01" step="0.01" aria-describedby="expenseAmountError" aria-label="จำนวนเงิน">
+          <div id="expenseAmountError" class="form-error" role="alert"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="expenseDescription">รายละเอียด</label>
+          <textarea id="expenseDescription" class="form-input" rows="3" maxlength="500" aria-describedby="expenseDescError expenseDescCharCount" aria-label="รายละเอียดการเบิกจ่าย"></textarea>
+          <div id="expenseDescError" class="form-error" role="alert"></div>
+          <small id="expenseDescCharCount" style="color: #999; display: block; margin-top: 5px;">0 / 500 ตัวอักษร</small>
+        </div>
+
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary" id="expenseSubmitBtn">บันทึก</button>
+          <button type="button" class="btn btn-secondary" data-action="close-modal" data-target="expenseModal" aria-label="ยกเลิกการบันทึก">ยกเลิก</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="historyModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="historyModalTitle">ประวัติการทำรายการ</h2>
+        <div id="historyDetails" style="color: #666; font-size: 14px; margin-top: 5px;"></div>
+      </div>
+
+      <div id="historyLoading" style="display: none; text-align: center; padding: 20px;" role="status" aria-live="polite">
+        กำลังโหลดประวัติ...
+      </div>
+
+      <div id="historyContainer" style="max-height: 60vh; overflow-y: auto;"></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-action="close-modal" data-target="historyModal" aria-label="ปิดหน้าต่างประวัติ">
+          ปิด
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="customAlertModal" class="modal" role="alertdialog" aria-labelledby="customAlertTitle" aria-modal="true">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h2 id="customAlertTitle">แจ้ง</h2>
+      </div>
+      <div id="customAlertMessage" style="padding: 15px; line-height: 1.6;"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" data-action="close-modal" data-target="customAlertModal" id="customAlertOkBtn" aria-label="ตกลง">
+          ตกลง
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <?!= include('JavaScript_helpers'); ?>
+  <?!= include('client_rpc_adapter'); ?>
+  <?!= include('JavaScript_modal_manager'); ?>
+  <?!= include('JavaScript_alerts_manager'); ?>
+  <?!= include('SkeletonLoader'); ?>
+  <?!= include('JavaScript_ui'); ?>
+  <?!= include('JavaScript_core'); ?>
+  <?!= include('record-expense-hotfix'); ?>
+  <?!= include('JavaScript_auto_restore_core'); ?>
+  <?!= include('JavaScript_enhancements_for_export_and_save'); ?>
+  <?!= include('exportDashboardHeader'); ?>
+  <?!= include('exportDashboardTable'); ?>
+  <?!= include('exportDashboardCoordinator'); ?>
+  <?!= include('JavaScript_workdetail_capture_export'); ?>
+  <?!= include('JavaScript_workdetail_ui_fixes'); ?>
+  <?!= include('JavaScript_createPdfReport'); ?>
+  <?!= include('hide_workdetail_and_card_exports'); ?>
+  <?!= include('JavaScript_actions'); ?>
+  <?!= include('workdetail_modal_patch'); ?>
+  <?!= include('JavaScript_export'); ?>
+  <?!= include('support_client'); ?>
+  <?!= include('showSupportView'); ?>
+  <?!= include('header_support_button_local'); ?>
+  <?!= include('TransferBudgetModal'); ?>
+  <?!= include('ViewToggle'); ?>
+  <?!= include('ExpenseEdit'); ?>
+</body>
+</html>

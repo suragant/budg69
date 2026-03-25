@@ -1,0 +1,309 @@
+<script>
+/**
+ * JavaScript_alerts_manager (robust close + clear flags + managed backdrop)
+ * - Ensures modal/backdrop lifecycle is consistent
+ * - Clears reentrancy flags on close and on error
+ * - Backdrop has data-managed-backdrop so close can reliably remove it
+ * - Exposes cleanup helper removeAlertsBackdropsForDebug()
+ */
+(function(){
+  if (window.__alertsManagerInstalled) return;
+  window.__alertsManagerInstalled = true;
+
+  function make(html){
+    var div = document.createElement('div');
+    div.innerHTML = html.trim();
+    return div.firstChild;
+  }
+
+  function ensureAlertsModal() {
+    try {
+      var m = document.getElementById('alertsModal');
+      if (m) return m;
+
+      var html = '\
+        <div id="alertsModal" class="modal" style="display:none; position:fixed; inset:0; z-index:3000; align-items:center; justify-content:center;">\
+          <div class="modal-content modal-content-small" role="dialog" aria-modal="true" aria-labelledby="alertsModalTitle" style="max-width:720px;">\
+            <div style="padding:12px 16px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">\
+              <strong id="alertsModalTitle" style="font-size:16px">แจ้งเตือนงบประมาณ</strong>\
+              <button id="alertsModalClose" aria-label="ปิด" style="background:#fff;border:0;padding:6px 10px;cursor:pointer;font-size:14px;">ปิด</button>\
+            </div>\
+            <div id="alertsContainer" style="padding:14px; max-height:60vh; overflow:auto; font-size:14px; color:#222;">\
+              <div style="color:#666">กำลังโหลด...</div>\
+            </div>\
+          </div>\
+        </div>';
+      m = make(html);
+      document.body.appendChild(m);
+
+      var closeBtn = document.getElementById('alertsModalClose');
+      if (closeBtn) closeBtn.addEventListener('click', function(){ closeAlertsModal(); });
+
+      // close when clicking outside modal-content
+      m.addEventListener('click', function(evt){
+        try {
+          var modalContent = m.querySelector('.modal-content');
+          if (modalContent && !modalContent.contains(evt.target)) {
+            closeAlertsModal();
+          }
+        } catch(e){}
+      }, false);
+
+      // ESC handler
+      function _escHandler(e){
+        try { if (e.key === 'Escape' || e.key === 'Esc') closeAlertsModal(); } catch(e){}
+      }
+      m.__escHandler = _escHandler;
+      document.addEventListener('keydown', _escHandler, true);
+
+      return m;
+    } catch (e) {
+      console.warn('ensureAlertsModal error', e);
+      return null;
+    }
+  }
+
+  function renderAlertsInto(container, alerts) {
+    try {
+      if (!container) return;
+      if (!Array.isArray(alerts) || alerts.length === 0) {
+        container.innerHTML = '<div style="padding:12px;color:#666;">ไม่มีการแจ้งเตือน</div>';
+        return;
+      }
+      var html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+      alerts.forEach(function(a){
+        var color = '#333';
+        if (a.level === 'critical') color = '#ff4444';
+        else if (a.level === 'high') color = '#ff9800';
+        else if (a.level === 'medium') color = '#ffc107';
+
+        html += '<div style="border:1px solid #eee;padding:10px;border-radius:6px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;background:#fff;">';
+        html += '<div style="flex:1"><div style="font-weight:700;color:' + color + ';">' + (a.itemId ? escapeHtml(a.itemId) : '') + '</div>';
+        html += '<div style="color:#444;">' + (a.work ? escapeHtml(a.work) : '') + ' — ' + (a.item ? escapeHtml(a.item) : '') + '</div>';
+        html += '<div style="color:#666;margin-top:6px;font-size:13px;">' + (a.message ? escapeHtml(a.message) : '') + '</div></div>';
+        html += '<div style="text-align:right;min-width:90px;"><div style="font-weight:700;color:' + color + ';">' + (a.percentage ? (a.percentage + '%') : '') + '</div>';
+        html += '<div style="color:#666;margin-top:6px;">คงเหลือ: ' + ((a.remaining !== undefined) ? (Number(a.remaining).toLocaleString('th-TH')) : '-') + '</div></div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      container.innerHTML = html;
+    } catch (e) {
+      console.warn('renderAlertsInto error', e);
+    }
+  }
+
+  // reentrancy guard
+  function _isOpening() { return !!window.__alerts_manager_opening; }
+  function _setOpening(v){ window.__alerts_manager_opening = !!v; }
+
+  // create and attach a managed backdrop and return it
+  function _createManagedBackdrop(zIndex) {
+    try {
+      var existing = document.querySelector('.modal-backdrop.app-managed[data-managed-backdrop="1"]');
+      if (existing) {
+        existing.style.display = 'block';
+        existing.style.zIndex = String(zIndex || 10049);
+        return existing;
+      }
+      var bd = document.createElement('div');
+      bd.className = 'modal-backdrop app-managed';
+      bd.setAttribute('data-managed-backdrop','1');
+      Object.assign(bd.style, {
+        position:'fixed', left:'0', top:'0', width:'100%', height:'100%',
+        background:'rgba(0,0,0,0.45)', zIndex:String(zIndex || 10049), pointerEvents:'auto'
+      });
+      // clicking backdrop closes modal
+      bd.addEventListener('click', function(){ try{ closeAlertsModal(); } catch(e){} });
+      document.body.appendChild(bd);
+      return bd;
+    } catch(e){
+      console.warn('_createManagedBackdrop failed', e);
+      return null;
+    }
+  }
+
+  // remove managed backdrop(s) and any likely overlays; restore pointer events
+  function _removeBackdropsAndRestore() {
+    try {
+      // remove our managed backdrop(s)
+      var managed = document.querySelectorAll('.modal-backdrop.app-managed[data-managed-backdrop="1"]');
+      managed.forEach(function(n){ try{ if(n.parentNode) n.parentNode.removeChild(n); }catch(e){} });
+
+      // try to remove leftovers (best-effort)
+      var other = document.querySelectorAll('.modal-backdrop:not([data-managed-backdrop="1"]), .dialog-backdrop, .backdrop, .overlay, .overlay-backdrop');
+      other.forEach(function(n){
+        try {
+          var s = window.getComputedStyle(n);
+          if (s && (s.position === 'fixed' || s.position === 'absolute')) {
+            if (n.parentNode) n.parentNode.removeChild(n);
+          }
+        } catch(e){}
+      });
+
+      // restore pointer events for main UI areas
+      try { var main = document.querySelector('.container'); if (main) main.style.pointerEvents = 'auto'; } catch(e){}
+      try { var bc = document.getElementById('budgetContainer'); if (bc) bc.style.pointerEvents = 'auto'; } catch(e){}
+      try { var hdr = document.querySelector('.header'); if (hdr) hdr.style.pointerEvents = 'auto'; } catch(e){}
+      try { var sbc = document.getElementById(window._supportBudgetContainerId || 'supportBudgetContainer'); if (sbc) sbc.style.pointerEvents = 'auto'; } catch(e){}
+    } catch(e){
+      console.warn('_removeBackdropsAndRestore error', e);
+    }
+  }
+
+  function closeAlertsModal() {
+    try {
+      var m = document.getElementById('alertsModal');
+      if (m) {
+        try { m.classList.remove('active'); } catch(e){}
+        try { m.style.display = 'none'; } catch(e){}
+        try { if (m.__escHandler) { document.removeEventListener('keydown', m.__escHandler, true); m.__escHandler = null; } } catch(e){}
+      }
+
+      // call modal_manager close if available (it may remove backdrops)
+      try {
+        if (typeof window.closeModalManaged === 'function') {
+          try { window.closeModalManaged(m || 'alertsModal'); } catch(e){ /* ignore */ }
+        }
+      } catch(e){}
+
+      // fallback: remove backdrops and restore UI interaction
+      _removeBackdropsAndRestore();
+    } catch(e){
+      console.warn('closeAlertsModal error', e);
+    } finally {
+      // clear manager flag and UI flag
+      try { _setOpening(false); } catch(_) {}
+      try { window.__alerts_ui_showing = false; } catch(_) {}
+    }
+  }
+
+  function openAlertsModal() {
+    // block reentrant calls
+    if (_isOpening()) {
+      console.warn('openAlertsModal: reentrant call blocked');
+      return;
+    }
+    _setOpening(true);
+
+    try {
+      // If UI-level showAlerts is present and not currently showing, prefer that (but avoid recursion)
+      if (typeof window.showAlerts === 'function' && !window.__alerts_ui_showing) {
+        try { window.__alerts_ui_showing = true; window.showAlerts(); return; } catch(e){ console.warn('showAlerts threw, falling back to manager implementation', e); }
+        finally { /* manager remains opening until closeAlertsModal clears flag */ }
+      }
+
+      var modal = ensureAlertsModal();
+      if (!modal) {
+        console.warn('openAlertsModal: cannot create modal');
+        _setOpening(false);
+        return;
+      }
+      var container = document.getElementById('alertsContainer');
+      if (container) container.innerHTML = '<div style="color:#666">กำลังโหลด...</div>';
+
+      // use modal_manager's open if available
+      var usedOpen = false;
+      try {
+        if (typeof window.openModal === 'function') {
+          try { window.openModal(modal, { zIndex: 10050 }); usedOpen = true; } catch(e){ usedOpen = false; }
+        }
+      } catch(e){ usedOpen = false; }
+
+      if (!usedOpen) {
+        try {
+          modal.style.display = 'flex';
+          modal.style.visibility = 'visible';
+          modal.style.pointerEvents = 'auto';
+          modal.style.opacity = '1';
+          modal.classList.add('active');
+          // create our managed backdrop so we can reliably remove it later
+          _createManagedBackdrop(10049);
+        } catch(e){ console.warn('openAlertsModal fallback display failed', e); }
+      }
+
+      // render State alerts immediately if present
+      if (window.State && Array.isArray(window.State.budgetAlerts)) {
+        renderAlertsInto(container, window.State.budgetAlerts || []);
+      }
+
+      // then refresh from server (best-effort)
+      if (window.google && google.script && typeof google.script.run === 'object') {
+        try {
+          google.script.run
+            .withSuccessHandler(function(res){
+              try {
+                var alerts = [];
+                if (!res) {}
+                else if (res.success && Array.isArray(res.alerts)) alerts = res.alerts;
+                else if (Array.isArray(res)) alerts = res;
+                else if (res.data && Array.isArray(res.data.alerts)) alerts = res.data.alerts;
+
+                if (alerts && alerts.length >= 0) {
+                  try { window.State = window.State || {}; window.State.budgetAlerts = alerts; } catch(e){}
+                  renderAlertsInto(container, alerts);
+                } else {
+                  if (container && container.innerHTML.trim() === '') container.innerHTML = '<div style="color:#666">ไม่มีการแจ้งเตือน</div>';
+                }
+              } catch(e) { console.error('openAlertsModal.successHandler error', e); }
+            })
+            .withFailureHandler(function(err){
+              try { if (container) container.innerHTML = '<div style="color:#a00">โหลดแจ้งเตือนไม่สำเร็จ (ดู console)</div>'; console.warn('checkBudgetAlerts failed', err); } catch(e){}
+            })
+            .checkBudgetAlerts();
+        } catch (e) {
+          console.warn('openAlertsModal google.script.run call failed', e);
+        }
+      } else {
+        if (container && container.innerHTML.trim() === '') container.innerHTML = '<div style="color:#666">ไม่สามารถเรียก server เพื่อโหลดแจ้งเตือนได้</div>';
+      }
+    } catch(e) {
+      console.error('openAlertsModal unexpected error', e);
+      // ensure flags cleared on error
+      try { _setOpening(false); } catch(_) {}
+      try { window.__alerts_ui_showing = false; } catch(_) {}
+    } finally {
+      // keep manager opening flag until closeAlertsModal clears it (prevents reentry)
+    }
+  }
+
+  // Expose public helpers
+  if (!window.ensureAlertsModal) window.ensureAlertsModal = ensureAlertsModal;
+  if (!window.openAlertsModal) window.openAlertsModal = openAlertsModal;
+  if (!window.closeAlertsModal) window.closeAlertsModal = closeAlertsModal;
+
+  // Bind show-alerts buttons idempotently
+  function bindAlertButtons() {
+    try {
+      var nodes = document.querySelectorAll('[data-action="show-alerts"], #alertsBtn, [data-action="alerts"], button.alerts');
+      Array.from(nodes).forEach(function(n){
+        if (n.__alertsBound) return;
+        n.addEventListener('click', function(e){
+          try { e && e.preventDefault && e.preventDefault(); } catch(_) {}
+          try { openAlertsModal(); } catch(err){ console.error(err); }
+        });
+        n.__alertsBound = true;
+      });
+    } catch (e) { console.warn('bindAlertButtons err', e); }
+  }
+
+  setTimeout(bindAlertButtons, 120);
+  window.addEventListener('load', function(){ setTimeout(bindAlertButtons, 200); });
+
+  // Debug helper you can paste/run in Console if UI blocked:
+  window.removeAlertsBackdropsForDebug = function(){
+    try {
+      var managed = document.querySelectorAll('.modal-backdrop.app-managed, .modal-backdrop[data-managed-backdrop="1"]');
+      managed.forEach(function(n){ try{ if(n.parentNode) n.parentNode.removeChild(n); }catch(e){} });
+      var other = document.querySelectorAll('.modal-backdrop, .dialog-backdrop, .backdrop, .overlay, .overlay-backdrop');
+      other.forEach(function(n){ try{ if(n.parentNode) n.parentNode.removeChild(n); }catch(e){} });
+      try { var main = document.querySelector('.container'); if (main) main.style.pointerEvents = 'auto'; } catch(e){}
+      try { var hdr = document.querySelector('.header'); if (hdr) hdr.style.pointerEvents = 'auto'; } catch(e){}
+      // clear flags
+      try { window.__alerts_manager_opening = false; } catch(e){}
+      try { window.__alerts_ui_showing = false; } catch(e){}
+      console.info('removeAlertsBackdropsForDebug: cleaned up');
+    } catch(e){ console.error('removeAlertsBackdropsForDebug failed', e); }
+  };
+
+})();
+</script>

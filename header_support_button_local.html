@@ -1,0 +1,36 @@
+<script>
+(function(){
+  function createSupportBtn() {
+    if (document.getElementById('btnSupport')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btnSupport';
+    btn.className = 'btn btn-secondary';
+    btn.textContent = 'เงินอุดหนุน';
+    btn.title = 'เปิดรายการงบเงินอุดหนุน';
+    btn.style.marginLeft = '8px';
+    btn.addEventListener('click', function(){
+      try {
+        if (typeof window.showSupportView === 'function') {
+          window.showSupportView();
+          return;
+        }
+        if (typeof window.initSupportClient === 'function') {
+          try { window.initSupportClient(); } catch(e){}
+        }
+        if (typeof window.loadSupportItemsList === 'function') {
+          try { window.loadSupportItemsList(); } catch(e){}
+        }
+        try { history.pushState({page:'support'}, 'Support', window.location.pathname + '?page=support'); } catch(e){}
+        // best-effort fallback: if none available, open in same tab with query param
+        if (!window.showSupportView && !window.initSupportClient && !window.loadSupportItemsList) {
+          try { window.location.href = window.location.pathname + '?page=support'; } catch(e){}
+        }
+      } catch(err){ console.warn('support button click fallback failed', err); alert('โมดูลงบเงินอุดหนุนยังไม่พร้อม โปรดรอสักครู่'); }
+    });
+    const actions = document.querySelector('.header') || document.querySelector('header') || document.body;
+    if (actions) actions.appendChild(btn);
+  }
+  createSupportBtn();
+  setTimeout(createSupportBtn, 800);
+})();
+</script>

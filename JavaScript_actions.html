@@ -1,0 +1,281 @@
+<script>
+/**
+ * JavaScript_actions.js
+ * Delegated click router + form bindings (full file, ready to paste)
+ *
+ * Changes:
+ * - routeAction returns true when it handled the action, false otherwise.
+ * - Delegated click handler attached in BUBBLE phase to avoid capture-phase conflicts.
+ * - 'export-dashboard' now attempts, in order:
+ *     exportDashboardCapture(), exportDashboardCoordinator(), exportDashboard()
+ * - Idempotent: will not attach multiple times.
+ */
+
+(function(window, document){
+  'use strict';
+
+  if (window._delegatedClickHandlerInstalled) {
+    console.log('actions.js: delegated handler already installed');
+    return;
+  }
+  window._delegatedClickHandlerInstalled = true;
+
+  // Route a button element (btn) according to its data-action / attributes
+  // Returns true if it handled the action; false if not handled.
+  function routeAction(btn) {
+    if (!btn || !btn.getAttribute) return false;
+    var action = btn.getAttribute('data-action');
+    try {
+      switch (action) {
+        case 'show-alerts':
+          if (typeof window.showAlerts === 'function') { window.showAlerts(); return true; }
+          return false;
+        case 'show-dashboard':
+          if (typeof window.showDashboard === 'function') { window.showDashboard(); return true; }
+          return false;
+        case 'logout':
+          if (typeof window.logout === 'function') { window.logout(); return true; }
+          return false;
+        case 'reset-filters':
+          if (typeof window.resetFilters === 'function') { window.resetFilters(); return true; }
+          return false;
+        case 'print-dashboard':
+          if (typeof window.printDashboard === 'function') { window.printDashboard(); return true; }
+          return false;
+        case 'export-dashboard':
+          // try client-side capture first
+          if (typeof window.exportDashboardCapture === 'function') {
+            try { window.exportDashboardCapture(); return true; } catch(e){ console.warn('exportDashboardCapture threw', e); }
+          }
+          // then try coordinator (the robust exporter)
+          if (typeof window.exportDashboardCoordinator === 'function') {
+            try { 
+              var res = window.exportDashboardCoordinator({ fileName: 'Dashboard_' + (new Date()).toISOString().slice(0,10) + '.pdf' });
+              // If it returns a promise, we don't block — it's fine
+              return true; 
+            } catch(e){ console.warn('exportDashboardCoordinator threw', e); }
+          }
+          // fallback: legacy name
+          if (typeof window.exportDashboard === 'function') {
+            try { window.exportDashboard(); return true; } catch(e){ console.warn('exportDashboard threw', e); }
+          }
+          console.warn('export-dashboard: no exporter found');
+          if (typeof window.showCustomAlert === 'function') {
+            try {
+              window.showCustomAlert('❌ Export ไม่พร้อม', 'ไม่พบฟังก์ชัน exportDashboardCapture/exportDashboardCoordinator/exportDashboard', 'error');
+            } catch(e){}
+          }
+          return false;
+        case 'print-workdetail':
+          if (typeof window.printWorkDetail === 'function') { window.printWorkDetail(); return true; }
+          return false;
+        case 'export-workdetail':
+          if (typeof window.exportWorkDetailCapture === 'function') { window.exportWorkDetailCapture(); return true; }
+          if (typeof window.exportCurrentDetail === 'function') { window.exportCurrentDetail(); return true; }
+          console.warn('export-workdetail: no exporter found');
+          return false;
+        case 'close-modal': {
+          var target = btn.getAttribute('data-target');
+          if (target && typeof window.closeModal === 'function') { window.closeModal(target); return true; }
+          return false;
+        }
+        case 'open-expense': {
+          var id = btn.getAttribute('data-id') || btn.getAttribute('data-item-id');
+          if (id && typeof window.openExpense === 'function') { window.openExpense(id); return true; }
+          return false;
+        }
+        case 'open-history': {
+          var id2 = btn.getAttribute('data-id') || btn.getAttribute('data-item-id');
+          if (id2 && typeof window.openHistory === 'function') { window.openHistory(id2); return true; }
+          return false;
+        }
+        case 'open-transfer': {
+          if (typeof window.openTransferModal === 'function') {
+         window.openTransferModal();
+          return true;
+         }
+         console.warn('open-transfer: openTransferModal not defined');
+          return false;
+        }
+        case 'open-work-detail': {
+          var work = btn.getAttribute('data-work');
+          if (work && typeof window.showWorkExpenseTypes === 'function') { window.showWorkExpenseTypes(work); return true; }
+          return false;
+        }
+        case 'open-budget-items': {
+          var work2 = btn.getAttribute('data-work');
+          var bt = btn.getAttribute('data-budget-type');
+          if (work2 && bt && typeof window.showBudgetTypeItems === 'function') { window.showBudgetTypeItems(work2, bt); return true; }
+          return false;
+        }
+        default: {
+          // fallback: inline onclick attribute (support nested names like window.obj.fn)
+          var inline = btn.getAttribute('onclick');
+          if (inline) {
+            try {
+              var m = inline.match(/^\s*([a-zA-Z0-9_$.]+)\s*\(/);
+              if (m && m[1]) {
+                var fnName = m[1];
+                var parts = fnName.split('.');
+                var fn = window;
+                for (var i = 0; i < parts.length; i++) {
+                  if (fn && typeof fn === 'object') fn = fn[parts[i]];
+                  else { fn = null; break; }
+                }
+                if (typeof fn === 'function') {
+                  try { fn.apply(btn); return true; } catch (e) { console.warn('inline onclick function threw', e); return false; }
+                }
+              }
+            } catch (e) { console.warn('inline onclick parse failed', e); }
+          }
+          // unhandled action
+          if (action) {
+            console.warn('Unhandled data-action:', action, 'on', btn);
+          }
+          return false;
+        }
+      }
+    } catch (err) {
+      console.error('routeAction error for action=' + action, err);
+      return false;
+    }
+  }
+
+  // Delegated click handler (BUBBLE phase to avoid capture-phase conflicts)
+  function delegatedClickHandler(e) {
+    try {
+      // If support container is set and click inside it, skip routing
+      if (window._supportBudgetContainerId) {
+        var sc = document.getElementById(window._supportBudgetContainerId);
+        if (sc && sc.contains(e.target)) return;
+      }
+
+      // Find nearest actionable element
+      var btn = e.target && e.target.closest ? e.target.closest('[data-action], [data-id], .record-btn, button') : null;
+      if (!btn) return;
+
+      // Route action; routeAction returns true if handled
+      var handled = false;
+      try { handled = !!routeAction(btn); } catch(err) { console.error('routeAction threw', err); handled = false; }
+
+      // Only suppress default/bubbling if we actually handled the action
+      if (handled) {
+        try { e.preventDefault(); } catch (err) {}
+        try { e.stopPropagation(); } catch (err) {}
+      }
+    } catch (err) {
+      console.error('delegatedClickHandler error', err);
+    }
+  }
+
+  // Attach once (BUBBLE phase)
+  try {
+    document.addEventListener('click', delegatedClickHandler, false);
+    console.log('actions.js: delegated click handler attached (bubble phase)');
+  } catch (e) {
+    console.error('actions.js: failed to attach delegated handler', e);
+  }
+
+  // Expense form binding (idempotent)
+ (function bindExpenseForm() {
+  try {
+    var form = document.getElementById('expenseForm');
+    if (!form) return;
+    if (form._wd_expense_bound_patch) return;
+    form._wd_expense_bound_patch = true;
+
+    function _getItemIdFromFormOrState() {
+      try {
+        var hid = document.querySelector('#expenseItemId') || document.querySelector('[name="itemId"]');
+        if (hid && hid.value && String(hid.value).trim()) return String(hid.value).trim();
+        if (window.State && State.selectedItem) return String(State.selectedItem.itemId || State.selectedItem.rowIndex || '').trim();
+        return '';
+      } catch (e) { return ''; }
+    }
+
+    function _setFormDisabled(disabled) {
+      try { Array.from(form.querySelectorAll('button,input,textarea,select')).forEach(function(i){ try{ i.disabled = !!disabled; }catch(e){} }); } catch(e){}
+    }
+
+    var submitting = false;
+
+    form.addEventListener('submit', function(e) {
+      try { e && e.preventDefault && e.preventDefault(); } catch(_) {}
+      if (submitting) { console.info('submit ignored (already submitting)'); return; }
+      submitting = true;
+      _setFormDisabled(true);
+
+      (function collectAndSend(){
+        try {
+          var dateEl = document.getElementById('expenseDate') || form.querySelector('[name="expenseDate"]');
+          var amountEl = document.getElementById('expenseAmount') || form.querySelector('[name="expenseAmount"], [name="amount"]');
+          var descEl = document.getElementById('expenseDescription') || form.querySelector('[name="expenseDescription"], [name="description"]');
+
+          var date = dateEl ? (dateEl.value || '') : '';
+          var amountRaw = amountEl ? (amountEl.value || '') : '';
+          var amount = parseFloat(String(amountRaw).replace(/[^0-9\.\-]/g,'')) || 0;
+          var desc = descEl ? (descEl.value || '') : '';
+
+          var itemId = _getItemIdFromFormOrState();
+          if (!itemId) {
+            if (typeof window.showCustomAlert === 'function') window.showCustomAlert('ข้อผิดพลาด','ไม่พบรหัสรายการสำหรับบันทึก','error');
+            submitting = false; _setFormDisabled(false); return;
+          }
+          if (amount <= 0) {
+            if (typeof window.showCustomAlert === 'function') window.showCustomAlert('แจ้งเตือน','กรุณาระบุจำนวนเงินที่ถูกต้อง','info');
+            submitting = false; _setFormDisabled(false); return;
+          }
+
+          var canCallWrapper = (typeof window.recordExpense === 'function');
+          var canCallGoogleRun = !!(window.google && google.script && google.script.run && typeof google.script.run.recordExpense === 'function');
+
+          console.info('bindExpenseForm: submitting', { itemId: itemId, amount: amount, desc: desc, date: date, wrapper: canCallWrapper, googleRun: canCallGoogleRun });
+
+          if (canCallWrapper) {
+            try {
+              window.recordExpense(itemId, amount, desc, date);
+              setTimeout(function(){ submitting = false; _setFormDisabled(false); }, 800);
+              return;
+            } catch(e) { console.warn('wrapper call failed, falling back', e); }
+          }
+
+          if (canCallGoogleRun) {
+            try {
+              google.script.run
+                .withSuccessHandler(function(res){
+                  try { if (typeof window.showCustomAlert === 'function') window.showCustomAlert('✅ บันทึกสำเร็จ','ทำรายการเบิกจ่ายเรียบร้อยแล้ว','success'); } catch(e){}
+                  try { if (typeof window.applyFilters === 'function') window.applyFilters(); } catch(e){}
+                  try { if (typeof window.loadData === 'function') window.loadData(); } catch(e){}
+                  try { if (typeof window.closeModal === 'function') window.closeModal('expenseModal'); else { var em = document.getElementById('expenseModal'); if (em) em.classList.remove('active'); } } catch(e){}
+                })
+                .withFailureHandler(function(err){
+                  try { if (typeof window.showCustomAlert === 'function') window.showCustomAlert('❌ ข้อผิดพลาด', String(err), 'error'); } catch(e){}
+                })
+                .recordExpense(itemId, amount, desc, date);
+            } catch(callErr){
+              console.error('google.script.run.recordExpense call error', callErr);
+              try { if (typeof window.showCustomAlert === 'function') window.showCustomAlert('❌ ข้อผิดพลาด', 'ไม่สามารถบันทึกข้อมูลได้', 'error'); } catch(e){}
+            } finally {
+              setTimeout(function(){ submitting = false; _setFormDisabled(false); }, 700);
+            }
+            return;
+          }
+
+          console.warn('bindExpenseForm: no recordExpense available');
+          if (typeof window.showCustomAlert === 'function') window.showCustomAlert('ข้อผิดพลาด','ระบบบันทึกไม่พร้อมใช้งาน กรุณาลองใหม่', 'error');
+          submitting = false; _setFormDisabled(false);
+        } catch(inner){
+          console.error('bindExpenseForm error', inner);
+          submitting = false; _setFormDisabled(false);
+        }
+      })();
+    }, { passive: false });
+
+    console.log('bindExpenseForm: patched (robust)');
+  } catch(e) {
+    console.warn('bindExpenseForm install failed', e);
+  }
+})();
+
+})(window, document);
+</script>

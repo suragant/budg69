@@ -1,0 +1,175 @@
+<script>
+(function(window, document){
+  'use strict';
+
+  if (window.__wd_recordExpense_wrapper_installed) return;
+  window.__wd_recordExpense_wrapper_installed = true;
+
+  window.__wd_record_dedupe = window.__wd_record_dedupe || { lastCalls: {}, ttl: 3000 };
+
+  function dedupeKey(itemId, amount, desc) {
+    return String(itemId || '') + '|' + String(amount || '') + '|' + String((desc || '').slice(0, 50));
+  }
+
+  function isDuplicate(itemId, amount, desc) {
+    try {
+      var key = dedupeKey(itemId, amount, desc);
+      var now = Date.now();
+      var last = window.__wd_record_dedupe.lastCalls[key];
+      if (last && (now - last) < window.__wd_record_dedupe.ttl) return true;
+      window.__wd_record_dedupe.lastCalls[key] = now;
+      Object.keys(window.__wd_record_dedupe.lastCalls).forEach(function(k){
+        if (now - window.__wd_record_dedupe.lastCalls[k] > 60000) delete window.__wd_record_dedupe.lastCalls[k];
+      });
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function normalizeDateForServer(value) {
+    try {
+      if (!value) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+      var parsed = new Date(String(value));
+      if (isNaN(parsed.getTime())) return '';
+      var yyyy = parsed.getFullYear();
+      var mm = ('0' + (parsed.getMonth() + 1)).slice(-2);
+      var dd = ('0' + parsed.getDate()).slice(-2);
+      return yyyy + '-' + mm + '-' + dd;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function normalizeIdClientSide(id) {
+    try {
+      if (typeof window.clientNormalizeItemId === 'function') return window.clientNormalizeItemId(id);
+      return String(id == null ? '' : id).replace(/\u00A0/g, ' ').replace(/[\s\-_]+/g, ' ').trim();
+    } catch (e) {
+      return String(id || '');
+    }
+  }
+
+  function isSupportId(id) {
+    try {
+      var v = String(id || '').toUpperCase().trim();
+      if (!v) return false;
+      if (window._supportDefaultPrefix) {
+        var pref = String(window._supportDefaultPrefix).toUpperCase();
+        if (v.indexOf(pref + '-') === 0 || v.indexOf(pref) === 0) return true;
+      }
+      return /^SP\d+/i.test(v);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function refreshAfterSave(useSupportApi) {
+    try {
+      if (useSupportApi) {
+        if (typeof window.loadSupportItemsList === 'function') window.loadSupportItemsList();
+        return;
+      }
+      if (typeof window.loadData === 'function') {
+        window.loadData();
+        return;
+      }
+      if (typeof window.applyFilters === 'function') {
+        window.applyFilters();
+      }
+    } catch (e) {
+      console.warn('[record-hotfix] refreshAfterSave failed', e);
+    }
+  }
+
+  function callMainExpense(itemId, amount, description, expenseDate) {
+    if (typeof window.rpcRecordExpense === 'function') {
+      return Promise.resolve(window.rpcRecordExpense(itemId, amount, description, expenseDate));
+    }
+    return new Promise(function(resolve, reject){
+      try {
+        if (!(window.google && google.script && google.script.run)) {
+          reject(new Error('No RPC available'));
+          return;
+        }
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .recordExpense(itemId, amount, description, expenseDate);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  function callSupportExpense(itemId, amount, description, expenseDate) {
+    if (typeof window.rpcRecordSupportExpense === 'function') {
+      return Promise.resolve(window.rpcRecordSupportExpense(itemId, amount, description, expenseDate, 0));
+    }
+    return new Promise(function(resolve, reject){
+      try {
+        if (!(window.google && google.script && google.script.run)) {
+          reject(new Error('No support RPC available'));
+          return;
+        }
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .recordSupportExpenseSupport(itemId, amount, description, expenseDate, 0);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  window.recordExpense = function(itemId, amount, description, expenseDate) {
+    try {
+      var hidden = document.getElementById('expenseItemId');
+      if (hidden && hidden.value) itemId = hidden.value;
+
+      if (itemId && typeof itemId === 'object' && itemId.nodeType === 1) {
+        itemId = (itemId.getAttribute && (itemId.getAttribute('data-id') || itemId.getAttribute('data-item-id'))) || itemId.id || '';
+      }
+
+      var normalizedItemId = normalizeIdClientSide(itemId);
+      var normalizedDate = normalizeDateForServer(expenseDate || (document.getElementById('expenseDate') || {}).value || '');
+      var useSupportApi = isSupportId(normalizedItemId) || window._supportMode === true;
+
+      if (isDuplicate(normalizedItemId, amount, description)) {
+        console.warn('[record-hotfix] duplicate record suppressed', normalizedItemId);
+        return Promise.resolve({ success: false, message: 'duplicate-suppressed' });
+      }
+
+      var callPromise = useSupportApi
+        ? callSupportExpense(normalizedItemId, amount, description, normalizedDate)
+        : callMainExpense(normalizedItemId, amount, description, normalizedDate);
+
+      return Promise.resolve(callPromise).then(function(res){
+        if (res && res.success) {
+          refreshAfterSave(useSupportApi);
+          try {
+            if (typeof window.closeModal === 'function') window.closeModal('expenseModal');
+          } catch (e) {}
+          return res;
+        }
+
+        var message = (res && res.message) ? res.message : 'ไม่สามารถบันทึกรายการได้';
+        if (typeof window.showCustomAlert === 'function') {
+          try { window.showCustomAlert('error', 'บันทึกไม่สำเร็จ', message); } catch (e) {}
+        }
+        return res;
+      }).catch(function(err){
+        console.error('[record-hotfix] recordExpense failed', err);
+        if (typeof window.showCustomAlert === 'function') {
+          try { window.showCustomAlert('error', 'เกิดข้อผิดพลาด', String(err)); } catch (e) {}
+        }
+        return { success: false, message: String(err) };
+      });
+    } catch (err) {
+      console.error('[record-hotfix] wrapper error', err);
+      return Promise.resolve({ success: false, message: String(err) });
+    }
+  };
+})(window, document);
+</script>

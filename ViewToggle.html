@@ -1,0 +1,389 @@
+<!--
+  ViewToggle.html (v4)
+  แก้ไข:
+  1. ปุ่มโอนงบหายหลัง refresh → re-init ใน _initViewToggle
+  2. card view เพี้ยน → ลบ .tile-amt และ .tile-work ออกตอน switch กลับ card
+  3. header หายตอน switch tile → rebuild wrapper ถ้า container หลุดออกไป
+-->
+
+<style>
+#viewToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1.5px solid #667eea;
+  border-radius: 8px;
+  background: transparent;
+  color: #667eea;
+  font-family: 'Sarabun', Arial, sans-serif;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+#viewToggleBtn:hover { background: #667eea; color: white; }
+
+#tileViewWrapper {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  overflow: hidden;
+  display: none;
+}
+#tileViewWrapper.visible { display: block; }
+
+#tileHeader {
+  display: grid;
+  grid-template-columns: 180px 1fr 110px 110px 120px 140px;
+  gap: 0 12px;
+  padding: 9px 16px;
+  background: #667eea;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+#tileHeader span { white-space: nowrap; }
+#tileHeader .th-right { text-align: right; }
+
+#budgetContainer.tile-view {
+  display: block !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  gap: 0 !important;
+}
+
+#budgetContainer.tile-view .budget-card {
+  display: grid !important;
+  grid-template-columns: 180px 1fr 110px 110px 120px 140px !important;
+  align-items: center !important;
+  gap: 0 12px !important;
+  border-radius: 0 !important;
+  border: none !important;
+  border-bottom: 1px solid #eee !important;
+  box-shadow: none !important;
+  padding: 9px 16px !important;
+  margin: 0 !important;
+  min-height: 52px !important;
+  transition: background 0.1s !important;
+}
+#budgetContainer.tile-view .budget-card:hover {
+  background: #f5f6ff !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ซ่อน card-header (department) ใน tile */
+#budgetContainer.tile-view .card-header { display: none !important; }
+
+.tile-work {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#budgetContainer.tile-view .card-body {
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  min-width: 0;
+  overflow: hidden;
+}
+#budgetContainer.tile-view .progress-ring,
+#budgetContainer.tile-view .detail-section,
+#budgetContainer.tile-view .budget-summary { display: none !important; }
+
+#budgetContainer.tile-view .card-body > div:first-child {
+  display: flex !important;
+  align-items: center !important;
+}
+#budgetContainer.tile-view .item-id {
+  margin-bottom: 0 !important;
+  font-size: 11px !important;
+  flex-shrink: 0;
+}
+.tile-item-name {
+  font-size: 12px;
+  color: #444;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+#budgetContainer.tile-view .tile-amt {
+  text-align: right;
+  font-size: 12px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+#budgetContainer.tile-view .tile-amt-budget    { color: #4CAF50; }
+#budgetContainer.tile-view .tile-amt-used      { color: #FF9800; }
+#budgetContainer.tile-view .tile-amt-remaining { color: #2196F3; }
+
+#budgetContainer.tile-view .card-actions {
+  padding: 0 !important;
+  gap: 6px !important;
+  justify-content: flex-end !important;
+  flex-wrap: nowrap !important;
+}
+#budgetContainer.tile-view .card-actions .btn {
+  flex: none !important;
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+  margin: 0 !important;
+}
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  var STORAGE_KEY = 'budgetViewMode';
+  var currentMode = 'card';
+  var _btn = null;
+
+  function fmtNum(n) {
+    return Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  /* ── ลบ tile injected elements ออกจาก card (ก่อน switch กลับ card) ── */
+  function cleanupTileInjections() {
+    var container = document.getElementById('budgetContainer');
+    if (!container) return;
+    container.querySelectorAll('.tile-work, .tile-item-name, .tile-amt').forEach(function (el) {
+      el.parentNode && el.parentNode.removeChild(el);
+    });
+  }
+
+  /* ── ensureWrapper: สร้างหรือ rebuild ถ้า container หลุดออกจาก wrapper ── */
+  function ensureWrapper() {
+    var container = document.getElementById('budgetContainer');
+    if (!container) return null;
+
+    var wrapper = document.getElementById('tileViewWrapper');
+
+    // ถ้า wrapper มีอยู่แล้วและ container อยู่ใน wrapper → ใช้ได้เลย
+    if (wrapper && wrapper.contains(container)) return wrapper;
+
+    // ถ้า wrapper มีแต่ container หลุดออก → เอา container กลับเข้าไป
+    if (wrapper) {
+      wrapper.appendChild(container);
+      return wrapper;
+    }
+
+    // ไม่มี wrapper เลย → สร้างใหม่
+    if (!container.parentNode) return null;
+
+    var header = document.createElement('div');
+    header.id = 'tileHeader';
+    header.innerHTML =
+      '<span>แผนงาน</span>' +
+      '<span>รายการ</span>' +
+      '<span class="th-right">งบประมาณ</span>' +
+      '<span class="th-right">เบิกจ่าย</span>' +
+      '<span class="th-right">คงเหลือ</span>' +
+      '<span class="th-right">การดำเนินการ</span>';
+
+    wrapper = document.createElement('div');
+    wrapper.id = 'tileViewWrapper';
+    wrapper.appendChild(header);
+    container.parentNode.insertBefore(wrapper, container);
+    wrapper.appendChild(container);
+
+    return wrapper;
+  }
+
+  /* ── inject tile cols ─────────────────────────────────────── */
+  function injectTileCols() {
+    var container = document.getElementById('budgetContainer');
+    if (!container) return;
+
+    container.querySelectorAll('.budget-card').forEach(function (card) {
+
+      /* col 1: work */
+      if (!card.querySelector('.tile-work')) {
+        var workDiv = document.createElement('div');
+        workDiv.className = 'tile-work';
+        var workText = '';
+        var detailEl = card.querySelector('.detail-section');
+        if (detailEl) {
+          detailEl.querySelectorAll('div').forEach(function (d) {
+            if (!workText && d.textContent.includes('งาน:')) {
+              workText = d.textContent.replace('งาน:', '').trim();
+            }
+          });
+        }
+        if (!workText) workText = card.getAttribute('data-work') || '';
+        workDiv.textContent = workText;
+        workDiv.title = workText;
+        card.insertBefore(workDiv, card.firstChild);
+      }
+
+      /* col 2: item name */
+      if (!card.querySelector('.tile-item-name')) {
+        var nameDiv = document.createElement('div');
+        nameDiv.className = 'tile-item-name';
+        var itemText = '';
+        var detailEl2 = card.querySelector('.detail-section');
+        if (detailEl2) {
+          var divs = detailEl2.querySelectorAll('div');
+          divs.forEach(function (d) {
+            if (!itemText && d.textContent.includes('รายการ:')) {
+              itemText = d.textContent.replace('รายการ:', '').trim();
+            }
+          });
+          if (!itemText && divs.length) {
+            itemText = divs[0].textContent.replace(/^[^:]+:/, '').trim();
+          }
+        }
+        if (!itemText) itemText = card.getAttribute('data-item') || '';
+        nameDiv.textContent = itemText;
+        nameDiv.title = itemText;
+        var body = card.querySelector('.card-body');
+        if (body) body.appendChild(nameDiv);
+      }
+
+      /* cols 3-5: amounts */
+      if (card.querySelector('.tile-amt')) return;
+      var bEl = card.querySelector('.amount-budget');
+      var uEl = card.querySelector('.amount-used');
+      var rEl = card.querySelector('.amount-remaining');
+      var budget    = bEl ? bEl.textContent.replace(/[^0-9.]/g, '') : (card.getAttribute('data-budget')    || '0');
+      var used      = uEl ? uEl.textContent.replace(/[^0-9.]/g, '') : (card.getAttribute('data-used')      || '0');
+      var remaining = rEl ? rEl.textContent.replace(/[^0-9.]/g, '') : (card.getAttribute('data-remaining') || '0');
+
+      function makeAmt(cls, val) {
+        var d = document.createElement('div');
+        d.className = 'tile-amt ' + cls;
+        d.textContent = fmtNum(val) + ' ฿';
+        return d;
+      }
+      var actions = card.querySelector('.card-actions');
+      if (actions) {
+        var rDiv = makeAmt('tile-amt-remaining', remaining);
+        var uDiv = makeAmt('tile-amt-used',      used);
+        var bDiv = makeAmt('tile-amt-budget',    budget);
+        card.insertBefore(rDiv, actions);
+        card.insertBefore(uDiv, rDiv);
+        card.insertBefore(bDiv, uDiv);
+      }
+    });
+  }
+
+  /* ── apply mode ───────────────────────────────────────────── */
+  function applyMode(mode) {
+    var container = document.getElementById('budgetContainer');
+    if (!container) return;
+
+    if (mode === 'tile') {
+      var wrapper = ensureWrapper();
+      injectTileCols();
+      container.classList.add('tile-view');
+      if (wrapper) wrapper.classList.add('visible');
+    } else {
+      // ✅ ลบ injected elements ก่อน switch กลับ card
+      cleanupTileInjections();
+
+      var wrapper = document.getElementById('tileViewWrapper');
+      if (wrapper && wrapper.parentNode && wrapper.contains(container)) {
+        wrapper.parentNode.insertBefore(container, wrapper);
+        wrapper.classList.remove('visible');
+      }
+      container.classList.remove('tile-view');
+    }
+
+    currentMode = mode;
+    updateBtn(mode);
+    try { localStorage.setItem(STORAGE_KEY, mode); } catch (e) {}
+  }
+
+  function updateBtn(mode) {
+    if (!_btn) return;
+    _btn.innerHTML = mode === 'tile' ? '&#9638; มุมมอง Card' : '&#8801; มุมมอง Tile';
+    _btn.title     = mode === 'tile' ? 'สลับเป็นมุมมอง Card' : 'สลับเป็นมุมมอง Tile';
+  }
+
+  function createBtn() {
+    var btn = document.getElementById('viewToggleBtn');
+    if (btn) { _btn = btn; return; }
+    btn = document.createElement('button');
+    btn.id   = 'viewToggleBtn';
+    btn.type = 'button';
+    _btn = btn;
+    var dashBtn = document.querySelector('[data-action="show-dashboard"]');
+    if (dashBtn && dashBtn.parentNode) dashBtn.parentNode.insertBefore(btn, dashBtn.nextSibling);
+    else { var h = document.querySelector('.header'); if (h) h.appendChild(btn); }
+  }
+
+  function wrapRenderCards() {
+    if (typeof window.renderCards !== 'function' || window.renderCards.__vtWrapped) return;
+    var orig = window.renderCards;
+    window.renderCards = function () {
+      // ✅ cleanup injections ก่อน re-render เสมอ
+      cleanupTileInjections();
+      orig.apply(this, arguments);
+      if (currentMode === 'tile') setTimeout(function () { applyMode('tile'); }, 0);
+    };
+    window.renderCards.__vtWrapped = true;
+  }
+
+  /* ── _initViewToggle (idempotent) ─────────────────────────── */
+  window._initViewToggle = function () {
+    var existing = document.getElementById('viewToggleBtn');
+    if (existing && document.body.contains(existing)) {
+      // ปุ่มมีอยู่แล้ว แค่ sync mode
+      updateBtn(currentMode);
+      return;
+    }
+
+    createBtn();
+    try { currentMode = localStorage.getItem(STORAGE_KEY) || 'card'; } catch (e) {}
+    updateBtn(currentMode);
+    _btn.addEventListener('click', function () {
+      applyMode(currentMode === 'card' ? 'tile' : 'card');
+    });
+    wrapRenderCards();
+    if (currentMode === 'tile') setTimeout(function () { applyMode('tile'); }, 400);
+  };
+
+  /* ── wrap displayData เพื่อ re-show ปุ่มโอนงบหลัง reload ─── */
+  function wrapDisplayData() {
+    if (typeof window.displayData !== 'function' || window.displayData.__vtWrapped2) return;
+    var orig = window.displayData;
+    window.displayData = function (payload) {
+      var result = orig.apply(this, arguments);
+      // ✅ บั๊ก 1: ตรวจ role แล้ว show/hide transferBudgetBtn
+      try {
+        var user = payload && payload.user;
+        var transferBtn = document.getElementById('transferBudgetBtn');
+        if (transferBtn && user) {
+          transferBtn.style.display = (user.role === 'admin') ? 'inline-flex' : 'none';
+        }
+      } catch (e) {}
+      return result;
+    };
+    window.displayData.__vtWrapped2 = true;
+  }
+
+  if (typeof window.displayData === 'function') {
+    wrapDisplayData();
+  } else {
+    var att = 0, wTid = setInterval(function () {
+      att++;
+      if (typeof window.displayData === 'function') { wrapDisplayData(); clearInterval(wTid); }
+      if (att > 100) clearInterval(wTid);
+    }, 100);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', window._initViewToggle);
+  else window._initViewToggle();
+
+})();
+</script>

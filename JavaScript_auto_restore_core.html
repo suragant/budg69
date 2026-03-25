@@ -1,0 +1,511 @@
+<script>
+/**
+ * JavaScript_auto_restore_core.js
+ * Optimized auto-restorer and safe alert wrapper for the budget app
+ *
+ * Purpose:
+ * - Ensure essential core shims (initializeSearchFilter, applyFilters, showWorkExpenseTypes) exist if missing.
+ * - Ensure Dashboard Export button exists and is bound (lazy-load heavy libs).
+ * - Ensure expense form save handler is bound idempotently.
+ * - Lightweight observer + short initial poll then backoff to reduce CPU cost (optimized).
+ * - Provide a safe wrapper for alert/notification calls (queueing and reentrancy protection).
+ *
+ * Usage:
+ * - Include this file after your core scripts and before action scripts.
+ * - Idempotent: safe to include multiple times; will not overwrite working implementations.
+ *
+ * Notes:
+ * - Designed to be non-invasive and only install shims/handlers when missing.
+ * - Heavy libs (html2canvas, jspdf) are lazy-loaded only when export is invoked.
+ * - Minimal logs to avoid DevTools overhead in production.
+ */
+
+(function(global, document){
+  'use strict';
+
+  // Guard: do not run twice for the same optimized installer
+  if (global && global._autoRestoreOptimizedInstalled) {
+    try { console.debug('[auto-restore] already installed optimized auto-restore'); } catch(e){}
+    return;
+  }
+  if (global) global._autoRestoreOptimizedInstalled = true;
+
+  const root = global || window;
+  const LOG = (...a) => { try { /* minimal logging in prod */ } catch(e){} };
+
+  // ---------------------- Utilities ----------------------
+  function isFn(x){ return typeof x === 'function'; }
+  function safeAssignIfMissing(name, fn){
+    if (isFn(root[name])) { return false; }
+    try { root[name] = fn; return true; } catch(e){ return false; }
+  }
+  function once(obj, prop){ if(obj[prop]) return false; obj[prop] = true; return true; }
+
+  // ---------------------- Core shims (lightweight) ----------------------
+  function installCoreShimsIfMissing(){
+    try {
+      // initializeSearchFilter: minimal, binds only needed inputs once
+      if (!isFn(root.initializeSearchFilter)) {
+        root.initializeSearchFilter = function initializeSearchFilter() {
+          try {
+            if (root._initSearchFilterBound) return;
+            root._initSearchFilterBound = true;
+            const selectorsMap = {
+              itemId: ['#searchItemId','#search-item-id','#search-item','input[name="searchItemId"]'],
+              item: ['#searchItem','#search-item','input[name="searchItem"]'],
+              work: ['#searchWork','#search-work','input[name="searchWork"]'],
+              department: ['#searchDepartment','#search-department','input[name="searchDepartment"]']
+            };
+            root._searchInputs = root._searchInputs || {};
+            Object.keys(selectorsMap).forEach(k=>{
+              if (root._searchInputs[k]) return;
+              for (const s of selectorsMap[k]) {
+                try {
+                  const el = document.querySelector(s);
+                  if (el) { root._searchInputs[k] = el; break; }
+                } catch(e){}
+              }
+            });
+            Object.values(root._searchInputs).forEach(el => {
+              if (!el || el._autoFilterBound) return;
+              el._autoFilterBound = true;
+              el.addEventListener('input', ()=>{ try{ if (isFn(root.applyFilters)) root.applyFilters(); }catch(e){} }, { passive: true });
+              el.addEventListener('change', ()=>{ try{ if (isFn(root.applyFilters)) root.applyFilters(); }catch(e){} }, { passive: true });
+            });
+            try { if (isFn(root.applyFilters)) root.applyFilters(); } catch(e){}
+            LOG('initializeSearchFilter shim bound');
+          } catch(e){ console.warn('initializeSearchFilter shim error', e); }
+        };
+      }
+
+      // applyFilters: minimal and attempts to call existing renderers
+      if (!isFn(root.applyFilters)) {
+        root.applyFilters = function applyFilters(){
+          try {
+            const S = root.State = root.State || {};
+            const all = Array.isArray(S.allItems) ? S.allItems : (Array.isArray(window.State && window.State.allItems) ? window.State.allItems : []);
+            // cheap select values (if inputs present)
+            const inputs = root._searchInputs || {};
+            const getVal = el => (el && (el.value || el.textContent)) ? String(el.value || el.textContent).trim().toLowerCase() : '';
+            const qId = getVal(inputs.itemId), qItem = getVal(inputs.item), qWork = getVal(inputs.work), qDept = getVal(inputs.department);
+
+            const filtered = (all || []).filter(it => {
+              try {
+                if (!it) return false;
+                const itemId = (it.itemId || it.rowIndex || '').toString().toLowerCase();
+                const itemText = (it.item || it.description || '').toString().toLowerCase();
+                const work = (it.work || '').toString().toLowerCase();
+                const dept = (it.department || '').toString().toLowerCase();
+                if (qId && itemId.indexOf(qId) === -1) return false;
+                if (qItem && itemText.indexOf(qItem) === -1) return false;
+                if (qWork && work.indexOf(qWork) === -1) return false;
+                if (qDept && dept.indexOf(qDept) === -1) return false;
+                return true;
+              } catch(e) { return false; }
+            });
+
+            S.filteredItems = filtered;
+
+            // try existing renderer list
+            const renderCandidates = ['renderCards','renderBudgetCards','displayCards','displayData','renderWorkExpenseTypes','displayDashboard','displayBudgetList'];
+            for (const fn of renderCandidates) {
+              if (isFn(root[fn])) {
+                try { root[fn](filtered); LOG('applyFilters used', fn); return; } catch(e){ LOG(fn, 'threw', e); }
+              }
+            }
+
+            // fallback minimal rendering into #budgetContainer if present (non-destructive)
+            const container = document.getElementById('budgetContainer') || document.querySelector('.budget-container');
+            if (container) {
+              container.innerHTML = '';
+              if (!filtered.length) {
+                container.innerHTML = '<div style="padding:12px;color:#666">ไม่พบข้อมูล</div>';
+              } else {
+                const wrap = document.createElement('div');
+                wrap.style.display = 'grid';
+                wrap.style.gridTemplateColumns = 'repeat(auto-fit,minmax(260px,1fr))';
+                wrap.style.gap = '12px';
+                filtered.forEach(it => {
+                  const card = document.createElement('div');
+                  card.style.border = '1px solid #ddd';
+                  card.style.padding = '8px';
+                  card.style.borderRadius = '6px';
+                  card.innerHTML = `<div style="font-weight:700">${escapeHtml(String(it.item || it.itemId || ''))}</div>
+                                    <div style="font-size:12px;color:#666">${escapeHtml(String(it.work || ''))}</div>
+                                    <div style="margin-top:6px;color:#4CAF50;font-weight:700">${Number(it.remaining || 0).toLocaleString('th-TH')} ฿</div>`;
+                  wrap.appendChild(card);
+                });
+                container.appendChild(wrap);
+              }
+            }
+            LOG('applyFilters shim applied, filteredCount=', filtered.length);
+          } catch(e){ console.warn('applyFilters shim error', e); }
+        };
+      }
+
+      // showWorkExpenseTypes shim: tries to use renderWorkExpenseTypes or getWorkDetails
+      if (!isFn(root.showWorkExpenseTypes)) {
+        root.showWorkExpenseTypes = function showWorkExpenseTypes(workName, opts) {
+          try {
+            if (isFn(root.renderWorkExpenseTypes)) {
+              const filtered = (root.State && Array.isArray(root.State.allItems)) ? root.State.allItems.filter(i => (i.work || '') === workName) : [];
+              try { root.renderWorkExpenseTypes(workName, filtered); LOG('showWorkExpenseTypes -> renderWorkExpenseTypes'); return; } catch(e){ LOG('renderWorkExpenseTypes threw', e); }
+            }
+            if (isFn(root.getWorkDetails)) {
+              try {
+                google.script.run
+                  .withSuccessHandler(res => {
+                    try {
+                      if (res && res.success && Array.isArray(res.detailedData) && isFn(root.renderWorkExpenseTypes)) {
+                        root.renderWorkExpenseTypes(workName, res.detailedData);
+                      } else {
+                        console.warn('getWorkDetails returned no detailedData', res);
+                      }
+                    } catch(e) { console.warn(e); }
+                  })
+                  .withFailureHandler(err => console.warn('getWorkDetails failed', err))
+                  .getWorkDetails(workName);
+                return;
+              } catch(e) { console.warn('call to getWorkDetails failed', e); }
+            }
+            console.warn('showWorkExpenseTypes fallback: no renderer available');
+          } catch(e) { console.warn('showWorkExpenseTypes shim error', e); }
+        };
+      }
+
+      // escapeHtml helper if missing
+      if (!isFn(root.escapeHtml)) {
+        root.escapeHtml = function escapeHtml(s){ if (s == null) return ''; return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+      }
+
+      LOG('Core shims installed if missing');
+    } catch(e) { console.warn('installCoreShimsIfMissing error', e); }
+  }
+
+  // ---------------------- Lazy loader for heavy libs ----------------------
+  function ensurePdfLibsLazy(){
+    if (root.__pdfLibsPromise) return root.__pdfLibsPromise;
+    root.__pdfLibsPromise = (async () => {
+      try {
+        if (typeof html2canvas === 'undefined') {
+          await new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+          }).catch(()=>{});
+        }
+        if (!root.jspdf || !root.jspdf.jsPDF) {
+          await new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+          }).catch(()=>{});
+        }
+        return true;
+      } catch(e) {
+        return false;
+      }
+    })();
+    return root.__pdfLibsPromise;
+  }
+
+  // ---------------------- Export button ensure + optimized binding ----------------------
+  function ensureDashboardExportButtonOptimized(){
+    try {
+      const modal = document.getElementById('dashboardModal') || document.querySelector('#dashboardModal');
+      const target = modal ? (modal.querySelector('.modal-content') || modal) : (document.querySelector('#dashboardContainer') || document.body);
+      if (!target) return false;
+      let btn = target.querySelector('#dashboardExportBtn');
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'dashboardExportBtn';
+        btn.className = 'btn btn-primary';
+        btn.textContent = '📄 Export PDF';
+        btn.style.marginLeft = '8px';
+        try { target.appendChild(btn); } catch(e){ document.body.appendChild(btn); }
+      }
+      if (btn._bound) return true;
+      btn._bound = true;
+
+      btn.addEventListener('click', async function(){
+        // Lazy load heavy libs when user explicitly asks to export
+        await ensurePdfLibsLazy().catch(()=>{});
+        try {
+          if (isFn(root.exportDashboardCapture)) { root.exportDashboardCapture({ fileName: 'Dashboard.pdf' }); return; }
+          if (isFn(root.exportDashboard)) { root.exportDashboard(); return; }
+          if (isFn(root.createPdfReport)) {
+            const html = (document.getElementById('dashboardContainer') || {}).innerHTML || (document.querySelector('#dashboardModal .modal-content') || {}).innerHTML || '';
+            try { root.createPdfReport(html, 'Dashboard_Report', btn); return; } catch(e){ LOG('createPdfReport failed', e); }
+          }
+          if (isFn(root.exportDashboardCoordinator)) {
+            try { root.exportDashboardCoordinator({ fileName: 'Dashboard.pdf' }); return; } catch(e){ LOG('coordinator failed', e); }
+          }
+          alert('ไม่พบตัวส่งออก PDF ในหน้านี้');
+        } catch(e) { console.warn('export handler error', e); }
+      }, { passive: true });
+
+      return true;
+    } catch(e) { console.warn('ensureDashboardExportButtonOptimized', e); return false; }
+  }
+
+  // ---------------------- Expense form safe binding ----------------------
+  function ensureExpenseHandlerOptimized(){
+    try {
+      const expenseModal = document.getElementById('expenseModal') || document.querySelector('#expenseModal');
+      const form = expenseModal ? expenseModal.querySelector('form') : (document.getElementById('expenseForm') || document.querySelector('#expenseModal form'));
+      let saveBtn = null;
+      if (form) saveBtn = form.querySelector('button[type="submit"], button.save-expense, button[data-action="record-expense"]');
+      if (!saveBtn) saveBtn = document.querySelector('#expenseModal button[data-action="record-expense"], button.save-expense');
+
+      if (form && !form._wd_expense_bound) {
+        form._wd_expense_bound = true;
+        form.addEventListener('submit', function(e){
+          e.preventDefault(); e.stopPropagation();
+          try {
+            const itemId = (root.State && root.State.selectedItem && root.State.selectedItem.itemId) || (form.querySelector('[name="itemId"]') && form.querySelector('[name="itemId"]').value) || '';
+            const amountRaw = form.querySelector('#expenseAmount') ? form.querySelector('#expenseAmount').value : (form.querySelector('input[name="expenseAmount"]') ? form.querySelector('input[name="expenseAmount"]').value : '');
+            const desc = form.querySelector('#expenseDescription') ? form.querySelector('#expenseDescription').value : (form.querySelector('[name="description"]') ? form.querySelector('[name="description"]').value : '');
+            const date = form.querySelector('#expenseDate') ? form.querySelector('#expenseDate').value : (form.querySelector('input[name="expenseDate"]') ? form.querySelector('input[name="expenseDate"]').value : '');
+            const amount = parseFloat(String(amountRaw).replace(/[^0-9\.\-]/g,'')) || 0;
+            if (!itemId) { alert('ไม่พบรหัสรายการ (Item ID)'); return; }
+            if (!amount || amount <= 0) { alert('กรุณาระบุจำนวนเงินที่ถูกต้อง'); return; }
+            // disable controls briefly
+            try { Array.from(form.querySelectorAll('button,input')).forEach(x=>x.disabled=true); } catch(e){}
+            if (isFn(root.recordExpense)) {
+              try {
+                google.script.run
+                  .withSuccessHandler(function(res){
+                    try { if (isFn(root.showCustomAlert)) root.showCustomAlert('✅ บันทึกสำเร็จ','บันทึกข้อมูลแล้ว','success'); } catch(e){}
+                    try { if (isFn(root.applyFilters)) root.applyFilters(); } catch(e){}
+                    try { if (isFn(root.loadData)) root.loadData(); } catch(e){}
+                    try { if (isFn(root.closeModal)) root.closeModal('expenseModal'); else { const em = document.getElementById('expenseModal'); if (em) em.classList.remove('active'); } } catch(e){}
+                    try { Array.from(form.querySelectorAll('button,input')).forEach(x=>x.disabled=false); } catch(e){}
+                  })
+                  .withFailureHandler(function(err){
+                    console.error('recordExpense failed', err);
+                    try { if (isFn(root.showCustomAlert)) root.showCustomAlert('❌ บันทึกไม่สำเร็จ', String(err), 'error'); } catch(e){}
+                    try { Array.from(form.querySelectorAll('button,input')).forEach(x=>x.disabled=false); } catch(e){}
+                  })
+                  .recordExpense(itemId, amount, desc, date);
+              } catch(e) {
+                console.error('google.script.run or recordExpense call error', e);
+                try { Array.from(form.querySelectorAll('button,input')).forEach(x=>x.disabled=false); } catch(e){}
+              }
+            } else {
+              console.warn('recordExpense not available on window');
+              try { Array.from(form.querySelectorAll('button,input')).forEach(x=>x.disabled=false); } catch(e){}
+            }
+          } catch(inner){ console.error('expense submit handling error', inner); }
+        }, { passive:false });
+        LOG('expense form bound (optimized)');
+      }
+
+      if (saveBtn && !saveBtn._wd_click_bound) {
+        saveBtn._wd_click_bound = true;
+        saveBtn.addEventListener('click', function(e){
+          try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
+          const f = form || (document.getElementById('expenseForm') || document.querySelector('#expenseModal form'));
+          try { if (f) f.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); } catch(e){}
+        }, { passive:false });
+        LOG('expense save button bound (optimized)');
+      }
+
+      return !!(form || saveBtn);
+    } catch(e) { console.warn('ensureExpenseHandlerOptimized error', e); return false; }
+  }
+
+  // ---------------------- Auto-backoff poller + modal observer ----------------------
+  // Stop any previous full-poller to avoid double work
+  if (root._autoRestorePollerId) {
+    try { clearInterval(root._autoRestorePollerId); } catch(e) {}
+    root._autoRestorePollerId = null;
+  }
+  // Install a light MutationObserver that monitors body for modal creation (narrow scope)
+  if (!root._dashboardModalObserver) {
+    try {
+      root._dashboardModalObserver = new MutationObserver((mutList) => {
+        let modalAdded = false;
+        for (const m of mutList) {
+          for (const n of (m.addedNodes || [])) {
+            if (n && n.id === 'dashboardModal') modalAdded = true;
+          }
+        }
+        if (modalAdded || document.getElementById('dashboardModal')) {
+          ensureDashboardExportButtonOptimized();
+        } else {
+          const container = document.querySelector('#dashboardContainer');
+          if (container && !container.querySelector('#dashboardExportBtn')) ensureDashboardExportButtonOptimized();
+        }
+      });
+      root._dashboardModalObserver.observe(document.body, { childList: true, subtree: true });
+    } catch(e) { console.warn('dashboard modal observer install failed', e); }
+  }
+
+  // poller: run short cycles then backoff to keep CPU low
+  (function startOptimizedPoller(){
+    let count = 0, maxShort = 3;
+    if (root._optimizedPollerId) return;
+    root._optimizedPollerId = setInterval(() => {
+      try {
+        installCoreShimsIfMissing();
+        ensureDashboardExportButtonOptimized();
+        ensureExpenseHandlerOptimized();
+        count++;
+        if (count >= maxShort) {
+          clearInterval(root._optimizedPollerId);
+          root._optimizedPollerId = null;
+          // keep a very low-frequency keepalive
+          root._optimizedKeepaliveId = setInterval(() => {
+            try { ensureDashboardExportButtonOptimized(); } catch(e){}
+          }, 30000);
+        }
+      } catch(e) { console.warn('optimized poller error', e); }
+    }, 1200);
+  })();
+
+  // ---------------------- Safe alert wrapper (queueing / reentrancy) ----------------------
+  // Idempotent install
+  if (!root.__safeShowAlertsInstalled) {
+    try {
+      root.__safeShowAlertsInstalled = true;
+      // preserve any existing implementation
+      if (!root.__orig_showAlerts) root.__orig_showAlerts = isFn(root.showAlerts) ? root.showAlerts : null;
+
+      root.__showAlertsRunning = root.__showAlertsRunning || false;
+      root.__showAlertsQueue = root.__showAlertsQueue || [];
+
+      // Safe wrapper that calls original when available or tries known candidates
+      root.safeShowAlerts = async function safeShowAlerts(...args) {
+        if (root.__showAlertsRunning) {
+          // queue one retry
+          root.__showAlertsQueue.push(args);
+          if (root.__showAlertsQueue.length === 1) {
+            setTimeout(function processQueue(){
+              const next = root.__showAlertsQueue.shift();
+              if (next) root.safeShowAlerts(...next);
+              if (root.__showAlertsQueue.length) setTimeout(processQueue, 500);
+            }, 400);
+          }
+          return;
+        }
+
+        root.__showAlertsRunning = true;
+        // disable alert buttons while running for immediate UX feedback
+        const alertButtons = Array.from(document.querySelectorAll('[data-action="show-alerts"], #alertBtn, .btn-alert, button.show-alerts, [data-role="alerts"]'));
+        alertButtons.forEach(b => { try { b.disabled = true; b.classList && b.classList.add('wd-action-loading'); } catch(e){} });
+
+        try {
+          // prefer preserved original
+          if (isFn(root.__orig_showAlerts)) {
+            const res = root.__orig_showAlerts.apply(root, args);
+            if (res && typeof res.then === 'function') {
+              try { await res; } catch(e){ console.warn('orig showAlerts rejected', e); }
+            }
+            return;
+          }
+
+          // try candidates by name (common alternatives)
+          const candidates = ['showAlerts','showNotifications','openAlertsModal','openNotifications','showAlertPanel','showNotif','openNotificationPanel'];
+          for (const name of candidates) {
+            if (isFn(root[name])) {
+              try {
+                const res = root[name].apply(root, args);
+                if (res && typeof res.then === 'function') {
+                  try { await res; } catch(e){ console.warn(name, 'promise rejected', e); }
+                }
+                return;
+              } catch(e) {
+                console.warn(name, 'threw', e);
+              }
+            }
+          }
+
+          // fallback: attempt to open an alerts container in DOM if present
+          const alertsNode = document.querySelector('#alertsPanel, .alerts-panel, #notificationPanel');
+          if (alertsNode) {
+            try { alertsNode.style.display = ''; } catch(e){}
+          } else {
+            // no-op if nothing found
+            LOG('safeShowAlerts: no candidate found');
+          }
+        } catch(e) {
+          console.error('safeShowAlerts error', e);
+          // schedule a retry as a fallback
+          setTimeout(()=>{ try { root.safeShowAlerts(...args); } catch(_){} }, 600);
+        } finally {
+          root.__showAlertsRunning = false;
+          alertButtons.forEach(b => { try { b.disabled = false; b.classList && b.classList.remove('wd-action-loading'); } catch(e){} });
+        }
+      };
+
+      // Idempotent binding of alert-like elements to safeShowAlerts
+      function bindAlertButtons() {
+        try {
+          const selectors = '[data-action="show-alerts"], #alertBtn, .btn-alert, button.show-alerts, [data-role="alerts"], .notif, .notification, .btn-notify';
+          const nodes = Array.from(document.querySelectorAll(selectors));
+          // also bind to buttons whose visible text includes 'แจ้งเตือน' or 'notification'
+          document.querySelectorAll('button, a, [role=button]').forEach(el => {
+            try {
+              const txt = (el.textContent || '').trim().toLowerCase();
+              if (txt && (txt.includes('แจ้งเตือน') || txt.includes('notification') || txt.includes('notify') || txt.includes('แจ้ง'))) nodes.push(el);
+            } catch(e){}
+          });
+          const uniq = Array.from(new Set(nodes));
+          uniq.forEach(el => {
+            try {
+              if (el._safe_alert_bound) return;
+              el._safe_alert_bound = true;
+              el.addEventListener('click', function(e){
+                try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
+                try { root.safeShowAlerts(); } catch(err){ console.warn('safeShowAlerts call failed', err); }
+              }, { passive: false });
+            } catch(e) {}
+          });
+          LOG('bindAlertButtons bound count=', uniq.length);
+        } catch(e){ console.warn('bindAlertButtons failed', e); }
+      }
+
+      // initial bind and set an observer that rebinds when modal/toolbar changes
+      bindAlertButtons();
+      const bindTarget = document.getElementById('dashboardModal') || document.body;
+      if (bindTarget && !root._safeAlertObserver) {
+        try {
+          root._safeAlertObserver = new MutationObserver((mutations) => {
+            if (root.__safeAlertBindTimeout) clearTimeout(root.__safeAlertBindTimeout);
+            root.__safeAlertBindTimeout = setTimeout(bindAlertButtons, 150);
+          });
+          root._safeAlertObserver.observe(bindTarget, { childList: true, subtree: true });
+        } catch(e) { console.warn('safeAlertObserver install failed', e); }
+      }
+
+      LOG('safeShowAlerts installed');
+    } catch(e) { console.warn('safeShowAlerts install error', e); }
+  }
+
+  // ---------------------- Kick off installs ----------------------
+  try {
+    installCoreShimsIfMissing();
+    ensureDashboardExportButtonOptimized();
+    ensureExpenseHandlerOptimized();
+    // safeShowAlerts installed above if missing
+  } catch(e) {
+    console.warn('auto-restore core init error', e);
+  }
+
+  // expose some debug controls
+  try {
+    root._autoRestore = root._autoRestore || {};
+    root._autoRestore.installCoreShimsIfMissing = installCoreShimsIfMissing;
+    root._autoRestore.ensureDashboardExportButtonOptimized = ensureDashboardExportButtonOptimized;
+    root._autoRestore.ensureExpenseHandlerOptimized = ensureExpenseHandlerOptimized;
+    root._autoRestore.safeShowAlerts = root.safeShowAlerts || function(){ console.warn('safeShowAlerts not installed'); };
+  } catch(e){}
+
+  // done
+  LOG('Auto-restore core (optimized) initialized');
+
+})(window, document);
+</script>

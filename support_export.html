@@ -1,0 +1,95 @@
+<script>
+/*
+  support_export.js (cleaned)
+  - Single consolidated init/binding for support export button
+  - Uses google.script.run.exportSupportReportPdf_inline to fetch base64 and opens PDF in new tab
+  - Ensures button state is restored on all code paths
+*/
+
+// support_export.js (force byItem + debug logs)
+//
+// This will:
+// - default to 'byItem' if no selector present
+// - log parameters to console before calling google.script.run
+// - keep UI feedback as before
+(function(){
+  function initSupportExport() {
+    const exportBtn = document.getElementById('supportExport');
+    if (!exportBtn) return;
+    if (exportBtn._export_bound) return;
+    exportBtn._export_bound = true;
+
+    exportBtn.addEventListener('click', function(e){
+      try { e.preventDefault(); } catch(e){}
+      // prefer explicit selector if present, otherwise default to byItem
+      const typeEl = document.getElementById('supportExportType');
+      const type = (typeEl && typeEl.value) ? typeEl.value : 'byItem';
+      const yearEl = document.getElementById('supportYear');
+      const fiscalEl = document.getElementById('supportFiscal');
+      const includeLogo = !!(document.getElementById('supportExportLogo') && document.getElementById('supportExportLogo').checked);
+      const year = yearEl ? Number(yearEl.value) : (new Date()).getFullYear();
+      const fiscalStartMonth = fiscalEl ? Number(fiscalEl.value) : 10;
+      const params = { year: year, fiscalStartMonth: fiscalStartMonth, includeLogo: includeLogo, fileName: `Support_${type}_${year}` };
+
+      console.log('[support_export] export requested', { reportType: type, params: params });
+
+      callExportInline(type, params);
+    }, { passive:false });
+  }
+
+  function callExportInline(reportType, params) {
+    const exportBtn = document.getElementById('supportExport');
+    const origText = exportBtn ? exportBtn.innerHTML : null;
+    if (exportBtn) { exportBtn.disabled = true; exportBtn.innerHTML = 'กำลังสร้าง PDF...'; }
+
+    try {
+      if (!(window.google && google.script && typeof google.script.run !== 'undefined')) {
+        if (exportBtn) { exportBtn.disabled = false; exportBtn.innerHTML = origText; }
+        return alert('ไม่สามารถเรียก server ได้ (google.script.run ไม่พร้อม)');
+      }
+
+      google.script.run
+        .withSuccessHandler(function(res){
+          console.log('[support_export] server response:', res);
+          if (exportBtn) { exportBtn.disabled = false; exportBtn.innerHTML = origText; }
+          if (!res) { console.error('[support_export] no server response'); return alert('ไม่พบผลลัพธ์จาก server'); }
+          if (!res.success) { console.error('[support_export] server returned error', res); return alert('สร้าง PDF ไม่สำเร็จ: ' + (res.message || 'Unknown')); }
+
+          const fileName = (res.data && res.data.fileName) ? res.data.fileName : 'SupportReport.pdf';
+          const b64 = (res.data && res.data.base64) ? res.data.base64 : null;
+          console.log('[support_export] fileName=', fileName, 'base64 present=', !!b64);
+          if (!b64) { console.error('[support_export] server did not include base64 data'); return alert('server ไม่ส่งข้อมูล PDF'); }
+
+          const dataUrl = 'data:application/pdf;base64,' + b64;
+          fetch(dataUrl)
+            .then(r => r.blob())
+            .then(blob => {
+              const url = URL.createObjectURL(blob);
+              window.open(url, '_blank');
+              setTimeout(() => { try { URL.revokeObjectURL(url); } catch(e){} }, 60*1000);
+            })
+            .catch(err => {
+              console.error('blob creation failed', err);
+              try { window.open(dataUrl, '_blank'); } catch(e) { alert('ไม่สามารถเปิดไฟล์ PDF ได้ (ดู console)'); }
+            });
+        })
+        .withFailureHandler(function(err){
+          if (exportBtn) { exportBtn.disabled = false; exportBtn.innerHTML = origText; }
+          console.error('export failed', err);
+          alert('เกิดข้อผิดพลาดขณะสร้าง PDF (ดู console)');
+        })
+        .exportSupportReportPdf_inline(reportType, params);
+    } catch(e) {
+      if (exportBtn) { exportBtn.disabled = false; exportBtn.innerHTML = origText; }
+      console.error('call error', e);
+      alert('ไม่สามารถเรียกฟังก์ชันสร้าง PDF ได้ (ดู console)');
+    }
+  }
+
+  try {
+    setTimeout(initSupportExport, 240);
+    window.addEventListener('load', function(){ setTimeout(initSupportExport, 200); });
+    window.initSupportExport = initSupportExport;
+  } catch(e){ console.warn('initSupportExport err', e); }
+})();
+</script>

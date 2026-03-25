@@ -1,0 +1,464 @@
+<script>
+(function(global){
+  'use strict';
+  const G = (typeof globalThis !== 'undefined') ? globalThis : global;
+
+  // ensure libs (html2canvas + jspdf) available
+  async function ensurePdfLibs() {
+    if (G.__pdfLibsPromise) return G.__pdfLibsPromise;
+    G.__pdfLibsPromise = (async () => {
+      function loadScript(src){
+        return new Promise((res, rej) => {
+          try {
+            if (document.querySelector('script[src="'+src+'"]')) return res();
+            const s = document.createElement('script');
+            s.src = src;
+            s.onload = res;
+            s.onerror = rej;
+            document.head.appendChild(s);
+          } catch (e) { rej(e); }
+        });
+      }
+      if (typeof html2canvas === 'undefined') {
+        try { await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'); } catch(e){ console.warn('load html2canvas failed', e); }
+      }
+      if (!G.jspdf || !G.jspdf.jsPDF) {
+        try { await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'); } catch(e){ console.warn('load jsPDF failed', e); }
+      }
+      return true;
+    })();
+    return G.__pdfLibsPromise;
+  }
+
+  const PX_PER_PT = 96/72;
+  const A4 = { widthPt: 595.28, heightPt: 841.89 };
+  const DEFAULT_MARGIN_PT = 36;
+  function _sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+  // helper: safe add image to jsPDF with fallback via canvas->jpeg
+  async function _addImageToPdf(pdf, dataUrl, formatHint, x, y, w, h) {
+    if (!pdf || !dataUrl) return false;
+    async function _validate(d) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        let done = false;
+        img.onload = () => { if (!done) { done = true; resolve(true); } };
+        img.onerror = () => { if (!done) { done = true; resolve(false); } };
+        try { img.src = d; } catch(e){ setTimeout(()=>{ if (!done) { done = true; resolve(false); } }, 0); }
+        setTimeout(()=>{ if (!done) { done = true; resolve(false); } }, 2500);
+      });
+    }
+    try {
+      const ok = await _validate(dataUrl);
+      if (ok) {
+        try { pdf.addImage(dataUrl, (formatHint||'PNG'), x, y, w, h); return true; } catch(e){ console.warn('pdf.addImage failed, fallback', e); }
+      }
+    } catch(e){ console.warn('validate dataUrl failed', e); }
+
+    // fallback: rasterize to jpeg
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = dataUrl;
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; setTimeout(()=>rej(new Error('img timeout')), 3000); });
+      const tmp = document.createElement('canvas');
+      tmp.width = img.naturalWidth || Math.max(1, Math.round(w * PX_PER_PT));
+      tmp.height = img.naturalHeight || Math.max(1, Math.round(h * PX_PER_PT));
+      const ctx = tmp.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,tmp.width,tmp.height);
+      try { ctx.drawImage(img, 0, 0, tmp.width, tmp.height); } catch(e){ console.warn('drawImage fallback failed', e); }
+      const jpeg = tmp.toDataURL('image/jpeg', 0.92);
+      if (jpeg && jpeg.length > 200) {
+        try { pdf.addImage(jpeg, 'JPEG', x, y, w, h); return true; } catch(e){ console.warn('pdf.addImage jpeg failed', e); }
+      }
+    } catch(e){ console.warn('fallback rasterize error', e); }
+    return false;
+  }
+
+  // Create labeled pie/doughnut image from Chart.js instance (draw percent labels)
+  async function buildPieImageWithPercent(chartInstance, canvasScale = 2, labelFontPx = 14) {
+    try {
+      const origCanvas = chartInstance && chartInstance.canvas ? chartInstance.canvas : null;
+      let baseDataUrl = null;
+      if (chartInstance && typeof chartInstance.toBase64Image === 'function') {
+        baseDataUrl = chartInstance.toBase64Image();
+      }
+      if (!baseDataUrl && origCanvas && typeof origCanvas.toDataURL === 'function') {
+        const sw = origCanvas.width || Math.round(origCanvas.clientWidth * (window.devicePixelRatio || 1));
+        const sh = origCanvas.height || Math.round(origCanvas.clientHeight * (window.devicePixelRatio || 1));
+        const tmpC = document.createElement('canvas');
+        tmpC.width = Math.max(1, Math.round(sw * canvasScale));
+        tmpC.height = Math.max(1, Math.round(sh * canvasScale));
+        const tctx = tmpC.getContext('2d');
+        tctx.imageSmoothingEnabled = true; tctx.imageSmoothingQuality = 'high';
+        tctx.drawImage(origCanvas, 0, 0, tmpC.width, tmpC.height);
+        baseDataUrl = tmpC.toDataURL('image/png');
+      }
+      if (!baseDataUrl) return null;
+
+      const img = new Image();
+      img.src = baseDataUrl;
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; setTimeout(() => rej(new Error('img load timeout')), 3000); });
+
+      const tmp = document.createElement('canvas');
+      tmp.width = img.naturalWidth || img.width || 400;
+      tmp.height = img.naturalHeight || img.height || 300;
+      const ctx = tmp.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,tmp.width,tmp.height);
+      ctx.drawImage(img, 0, 0, tmp.width, tmp.height);
+
+      try {
+        const meta = chartInstance.getDatasetMeta(0);
+        const data = chartInstance.data && chartInstance.data.datasets && chartInstance.data.datasets[0] && chartInstance.data.datasets[0].data ? chartInstance.data.datasets[0].data : [];
+        const total = data.reduce((a,b)=> a + (Number(b)||0), 0) || 0;
+        ctx.font = `${labelFontPx}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = Math.max(2, Math.round(labelFontPx/6));
+        const chCanvas = chartInstance.canvas;
+        const scaleX = tmp.width / (chCanvas.width || chCanvas.clientWidth || tmp.width);
+        const scaleY = tmp.height / (chCanvas.height || chCanvas.clientHeight || tmp.height);
+        for (let i = 0; i < (meta && meta.data ? meta.data.length : 0); i++) {
+          try {
+            const el = meta.data[i];
+            const start = el.startAngle !== undefined ? el.startAngle : (el._startAngle || 0);
+            const end = el.endAngle !== undefined ? el.endAngle : (el._endAngle || 0);
+            const mid = (start + end) / 2;
+            const cx = (el.x !== undefined ? el.x : (chartInstance.chartArea && (chartInstance.chartArea.left + chartInstance.chartArea.right)/2)) * scaleX;
+            const cy = (el.y !== undefined ? el.y : (chartInstance.chartArea && (chartInstance.chartArea.top + chartInstance.chartArea.bottom)/2)) * scaleY;
+            const innerR = (el.innerRadius !== undefined ? el.innerRadius : (el._innerRadius || 0)) * ((scaleX + scaleY)/2);
+            const outerR = (el.outerRadius !== undefined ? el.outerRadius : (el._outerRadius || el._model && el._model.outerRadius || 0)) * ((scaleX + scaleY)/2);
+            const labelR = (innerR + outerR) / 2;
+            const lx = cx + Math.cos(mid) * labelR;
+            const ly = cy + Math.sin(mid) * labelR;
+            const val = Number(data[i]||0);
+            const pct = total ? Math.round((val / total) * 100) : 0;
+            const text = `${pct}%`;
+            ctx.strokeText(text, lx, ly);
+            ctx.fillText(text, lx, ly);
+          } catch(e){}
+        }
+      } catch(e){ console.warn('pie overlay failed', e); }
+
+      return tmp.toDataURL('image/png');
+    } catch (e) {
+      console.warn('buildPieImageWithPercent failed', e);
+      return null;
+    }
+  }
+
+  // Try to infer a chart title from Chart.js config or surrounding DOM
+  function inferChartTitle(canvasEl) {
+    try {
+      if (!canvasEl) return '';
+      // Chart.js plugin/title
+      try {
+        if (window.Chart && canvasEl.id && typeof Chart.getChart === 'function') {
+          const ch = Chart.getChart(canvasEl.id);
+          if (ch) {
+            const opts = ch.options || (ch.config && ch.config.options);
+            if (opts) {
+              if (opts.plugins && opts.plugins.title) {
+                const t = opts.plugins.title.text || opts.plugins.title;
+                if (t) return (typeof t === 'string') ? t.trim() : String(t).trim();
+              }
+              if (opts.title) {
+                const t2 = opts.title.text || opts.title;
+                if (t2) return (typeof t2 === 'string') ? t2.trim() : String(t2).trim();
+              }
+            }
+          }
+        }
+      } catch(e){ /* ignore */ }
+
+      // canvas attributes
+      try {
+        const attrCandidates = ['data-title','data-chart-title','title','aria-label','alt'];
+        for (const a of attrCandidates) {
+          const v = canvasEl.getAttribute && canvasEl.getAttribute(a);
+          if (v && String(v).trim()) return String(v).trim();
+        }
+      } catch(e){}
+
+      // nearby nodes
+      const texty = (n)=>{
+        try {
+          if (!n) return '';
+          const t = (n.textContent || '').trim();
+          if (t && t.length>1 && t.length < 160) return t;
+          return '';
+        } catch(e){ return ''; }
+      };
+
+      const checkNodeForTitle = (n)=>{
+        if (!n) return '';
+        if (/^H[1-4]$/i.test(n.tagName)) {
+          const t = texty(n); if (t) return t;
+        }
+        const cls = (n.className || '') + '';
+        if (cls && /chart[-_ ]?title|card[-_ ]?title|panel[-_ ]?title|header|title/i.test(cls)) {
+          const t = texty(n); if (t) return t;
+        }
+        if (/^(DIV|SPAN|P|LABEL|STRONG|FIGCAPTION)$/i.test(n.tagName)) {
+          const t = texty(n); if (t) return t;
+        }
+        return '';
+      };
+
+      try {
+        let s = canvasEl.previousElementSibling;
+        if (s) {
+          const t = checkNodeForTitle(s); if (t) return t;
+          const inner = s.querySelector && (s.querySelector('.chart-title, .title, h1, h2, h3, h4, label, strong'));
+          if (inner) { const t2 = texty(inner); if (t2) return t2; }
+        }
+        s = canvasEl.nextElementSibling;
+        if (s) {
+          const t = checkNodeForTitle(s); if (t) return t;
+          const inner2 = s.querySelector && (s.querySelector('.chart-title, .title, h1, h2, h3, h4, label, strong'));
+          if (inner2) { const t3 = texty(inner2); if (t3) return t3; }
+        }
+      } catch(e){}
+
+      try {
+        let el = canvasEl;
+        for (let depth=0; depth<6 && el; depth++) {
+          let prev = el.previousElementSibling;
+          while (prev) {
+            const t = checkNodeForTitle(prev); if (t) return t;
+            const inner = prev.querySelector && prev.querySelector('.chart-title, .title, h1, h2, h3, h4, label, strong');
+            if (inner) { const ti = texty(inner); if (ti) return ti; }
+            prev = prev.previousElementSibling;
+          }
+          const candidate = el.querySelector && el.querySelector('.chart-title, .title, h1, h2, h3, h4, label, strong');
+          if (candidate) { const ti = texty(candidate); if (ti) return ti; }
+          el = el.parentElement;
+        }
+      } catch(e){}
+
+      try {
+        const labelled = canvasEl.getAttribute && canvasEl.getAttribute('aria-labelledby');
+        if (labelled) {
+          const el = document.getElementById(labelled);
+          if (el) {
+            const t = (el.textContent || '').trim();
+            if (t) return t;
+          }
+        }
+      } catch(e){}
+
+      return '';
+    } catch(e){ return ''; }
+  }
+
+  // capture header (title + up to 2 chart previews) and return dataUrl + size in pt
+  async function captureDashboardHeader(opts = {}) {
+    await ensurePdfLibs();
+    try {
+      const pageWidthPt = opts.pageWidthPt || A4.heightPt; // landscape width in pt
+      const marginPt = (typeof opts.marginPt === 'number') ? opts.marginPt : DEFAULT_MARGIN_PT;
+      const contentWidthPt = pageWidthPt - (marginPt * 2);
+      const contentWidthPx = Math.round(contentWidthPt * PX_PER_PT);
+      // allow callers override scale; default carve-out
+      const baseScale = Math.max(1.5, Math.floor(window.devicePixelRatio || 1));
+      const requestedScale = typeof opts.scale === 'number' ? Math.max(1, opts.scale) : baseScale;
+
+      // build header DOM (use DOM API to avoid innerHTML issues)
+      const header = document.createElement('div');
+      header.style.boxSizing = 'border-box';
+      header.style.background = '#fff';
+      header.style.width = contentWidthPx + 'px';
+      header.style.padding = '6px';
+
+      const centerDiv = document.createElement('div');
+      centerDiv.style.textAlign = 'center';
+
+      const title = document.createElement('div');
+      title.style.fontSize = '18px';
+      title.style.color = '#667eea';
+      title.style.fontWeight = '700';
+      title.textContent = '📊 ระบบสารสนเทศในการบริหารงบประมาณของเทศบาลเมืองเขลางค์นคร';
+      centerDiv.appendChild(title);
+
+      const dateDiv = document.createElement('div');
+      dateDiv.style.fontSize = '11px';
+      dateDiv.style.color = '#333';
+      dateDiv.textContent = `รายงาน Dashboard • พิมพ์เมื่อ: ${new Date().toLocaleString('th-TH')}`;
+      centerDiv.appendChild(dateDiv);
+
+      const userDiv = document.createElement('div');
+      userDiv.style.fontSize = '11px';
+      userDiv.style.color = '#333';
+      const userText = (document.getElementById('userEmail') || { textContent: '' }).textContent || '';
+      userDiv.textContent = `ผู้ใช้งาน | ${userText}`;
+      centerDiv.appendChild(userDiv);
+
+      // give a small gap below main header so chart titles can fit between header and charts
+      centerDiv.style.marginBottom = '8px';
+      header.appendChild(centerDiv);
+
+      // insert up to 2 chart previews (best-effort) — include chart title above each image
+      const root = opts.sourceRoot ||
+        document.querySelector('#dashboardModal .modal-content') ||
+        document.getElementById('dashboardContainer') ||
+        document.body;
+      const canvases = Array.from(root.querySelectorAll('canvas'));
+      if (canvases.length) {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.gap = '12px';
+        row.style.justifyContent = 'space-between';
+        for (let i=0;i<Math.min(2, canvases.length); i++) {
+          try {
+            const c = canvases[i];
+            let url = null;
+            let chartTitle = '';
+
+            // infer title first (prefer Chart.js config)
+            try { chartTitle = inferChartTitle(c) || ''; } catch(e){ chartTitle = ''; }
+
+            // try Chart.js instance first and if pie/doughnut create labeled image
+            try {
+              if (window.Chart && c.id && typeof Chart.getChart === 'function') {
+                const ch = Chart.getChart(c.id);
+                if (ch) {
+                  const type = (ch.config && ch.config.type) || (ch.options && ch.options.type) || '';
+                  if (type && (type.toLowerCase().includes('doughnut') || type.toLowerCase().includes('pie'))) {
+                    const labeled = await buildPieImageWithPercent(ch, Math.max(2, Math.floor(window.devicePixelRatio||1)), 14);
+                    if (labeled) { url = labeled; }
+                  }
+                  if (!url && typeof ch.toBase64Image === 'function') url = ch.toBase64Image();
+                  try {
+                    const optsTitle = ch && ch.options && ch.options.plugins && ch.options.plugins.title && ch.options.plugins.title.text;
+                    if (optsTitle) chartTitle = (typeof optsTitle === 'string') ? optsTitle : String(optsTitle);
+                  } catch(e){}
+                }
+              }
+            } catch(e){ /* ignore chart-specific errors */ }
+
+            if (!url) {
+              // fallback: ensure pixels and use toDataURL (we will try with requestedScale)
+              try {
+                const tmp = document.createElement('canvas');
+                tmp.width = c.width || Math.round(c.clientWidth * requestedScale);
+                tmp.height = c.height || Math.round(c.clientHeight * requestedScale);
+                const ctx = tmp.getContext('2d');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0,0,tmp.width,tmp.height);
+                ctx.drawImage(c, 0, 0, tmp.width, tmp.height);
+                url = tmp.toDataURL('image/png');
+              } catch(e){ url = null; }
+            }
+
+            if (url) {
+              const col = document.createElement('div');
+              col.style.flex = '1 1 48%';
+              col.style.boxSizing = 'border-box';
+
+              // add title above image (this is the change you asked for)
+              if (chartTitle && chartTitle.trim()) {
+                const t = document.createElement('div');
+                t.textContent = chartTitle;
+                t.style.fontSize = '12px';
+                t.style.fontWeight = '600';
+                t.style.color = '#333';
+                t.style.textAlign = 'center';
+                t.style.margin = '8px 0 6px 0';
+                col.appendChild(t);
+              } else {
+                // keep a small spacer so layout remains consistent even if no title found
+                const spacer = document.createElement('div');
+                spacer.style.height = '12px';
+                col.appendChild(spacer);
+              }
+
+              const img = document.createElement('img');
+              img.src = url;
+              // Shrink chart previews slightly so title fits without pushing table too far
+              img.style.maxWidth = '100%';
+              img.style.maxHeight = '260px'; // reduced height to give room for titles
+              img.style.height = 'auto';
+              img.style.display = 'block';
+              img.style.margin = '0 auto';
+              img.style.objectFit = 'contain';
+              col.appendChild(img);
+
+              // legend spacing: keep legend below chart within same column (no change)
+              row.appendChild(col);
+            } else {
+              console.warn('captureDashboardHeader: chart preview generation failed for canvas index', i, c.id || '(no id)');
+            }
+          } catch(e){ console.warn('captureDashboardHeader: canvas handling error', e); }
+        }
+        if (row.childElementCount) header.appendChild(row);
+      }
+
+      // render header off-screen and use html2canvas
+      const holder = document.createElement('div');
+      holder.style.position = 'fixed'; holder.style.left = '0'; holder.style.top = '0';
+      holder.style.opacity = '0'; holder.style.pointerEvents = 'none';
+      holder.style.width = contentWidthPx + 'px';
+      holder.appendChild(header);
+      document.body.appendChild(holder);
+      try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(e){}
+      await _sleep(120);
+
+      // We'll attempt capture up to two times (initial scale, then a higher scale) to mitigate tainting/failure
+      let captured = null;
+      const attemptScales = [requestedScale, Math.max(2, requestedScale*1.8)];
+      for (let si=0; si<attemptScales.length; si++) {
+        const sc = attemptScales[si];
+        try {
+          if (typeof html2canvas !== 'undefined') {
+            captured = await html2canvas(header, { scale: sc, useCORS:true, backgroundColor:'#ffffff', width: contentWidthPx, logging:false });
+          } else {
+            console.warn('captureDashboardHeader: html2canvas not available (attempt ' + si + ')');
+            captured = null;
+          }
+        } catch(ev){
+          console.warn('html2canvas header capture failed (attempt ' + si + ')', ev);
+          captured = null;
+        }
+        // basic validation: captured must be a canvas-like object with width/height
+        if (captured && captured.width && captured.height) {
+          // sanity: convert to dataURL and check prefix
+          try {
+            const tmp = document.createElement('canvas'); tmp.width = captured.width; tmp.height = captured.height;
+            const ctx = tmp.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,tmp.width,tmp.height); ctx.drawImage(captured,0,0);
+            const dataUrl = tmp.toDataURL('image/png');
+            if (typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {
+              // good capture
+              try { document.body.removeChild(holder); } catch(e){}
+              await _sleep(60);
+              const widthPt = tmp.width / PX_PER_PT;
+              const heightPt = tmp.height / PX_PER_PT;
+              return { dataUrl, widthPt, heightPt };
+            } else {
+              console.warn('captureDashboardHeader: captured dataURL invalid (attempt ' + si + ')');
+            }
+          } catch(e) {
+            console.warn('captureDashboardHeader: post-process failed (attempt ' + si + ')', e);
+          }
+        }
+        // not valid, try next attempt
+      }
+
+      // remove holder then fallback
+      try { document.body.removeChild(holder); } catch(e){}
+      await _sleep(60);
+      console.warn('captureDashboardHeader: all capture attempts failed, returning null');
+      return null;
+    } catch (err) {
+      console.error('captureDashboardHeader error', err);
+      return null;
+    }
+  }
+
+  // expose helpers safely
+  if (!G.captureDashboardHeader) G.captureDashboardHeader = captureDashboardHeader;
+  if (!G._addImageToPdf) G._addImageToPdf = _addImageToPdf;
+
+})(window);
+</script>

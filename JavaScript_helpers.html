@@ -1,0 +1,138 @@
+<script nonce="SSR2ii5fRwtNJngHlEUxow">
+'use strict';
+
+window.escapeHtml = function(text) {
+  if (!text) return '';
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return String(text).replace(/[&<>"']/g, m => map[m]);
+};
+
+window.createSafeTextNode = function(text) {
+  return document.createTextNode(text || '');
+};
+
+window.setElementText = function(elem, text) {
+  if (!elem) return;
+  while (elem.firstChild) {
+    elem.removeChild(elem.firstChild);
+  }
+  elem.appendChild(window.createSafeTextNode(text));
+};
+
+window.validateExpenseForm = function(formData) {
+  const errors = [];
+  const { date, amount, description } = formData;
+
+  if (!date || !date.trim()) {
+    errors.push('เธงเธฑเธเธ—เธตเนเธเธณเน€เธเนเธ');
+  } else {
+    const selectedDate = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (isNaN(selectedDate.getTime())) {
+      errors.push('เธฃเธนเธเนเธเธเธงเธฑเธเธ—เธตเนเนเธกเนเธ–เธนเธเธ•เนเธญเธ');
+    } else if (selectedDate > today) {
+      errors.push('เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธเธฑเธเธ—เธถเธเธงเธฑเธเธ—เธตเนเนเธเธญเธเธฒเธเธ•เนเธ”เน');
+    } else if (selectedDate < new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000)) {
+      errors.push('เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธเธฑเธเธ—เธถเธเน€เธเธดเธเธเนเธฒเธขเน€เธเนเธฒเธเธงเนเธฒ 1 เธเธตเนเธ”เน');
+    }
+  }
+
+  const amountNum = parseFloat(amount);
+  if (isNaN(amountNum) || amountNum <= 0) {
+    errors.push('เธเธณเธเธงเธเน€เธเธดเธเธ•เนเธญเธเธกเธฒเธเธเธงเนเธฒ 0');
+  } else if (amountNum > 9999999.99) {
+    errors.push('เธเธณเธเธงเธเน€เธเธดเธเธกเธฒเธเน€เธเธดเธเนเธ (เธชเธนเธเธชเธธเธ” 9,999,999.99 เธเธฒเธ—)');
+  }
+
+  if (description && description.length > 500) {
+    errors.push('เธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธ•เนเธญเธเนเธกเนเน€เธเธดเธ 500 เธ•เธฑเธงเธญเธฑเธเธฉเธฃ');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+};
+
+window.displayFormErrors = function(errors) {
+  document.querySelectorAll('.form-error').forEach(el => {
+    el.textContent = '';
+    el.style.display = 'none';
+  });
+
+  Object.keys(errors).forEach(fieldId => {
+    const errorEl = document.getElementById(fieldId + 'Error');
+    if (errorEl) {
+      errorEl.textContent = errors[fieldId];
+      errorEl.style.display = 'block';
+    }
+  });
+};
+
+window.showCustomAlert = function(type, title, message, onClose) {
+  const modal = document.getElementById('customAlertModal');
+  const titleEl = document.getElementById('customAlertTitle');
+  const messageEl = document.getElementById('customAlertMessage');
+  const okBtn = document.getElementById('customAlertOkBtn');
+
+  if (!modal || !titleEl || !messageEl) {
+    console.error('Custom alert modal not found');
+    alert(title + '\n' + message);
+    return;
+  }
+
+  modal.style.borderLeft = {
+    'success': '4px solid #4CAF50',
+    'error': '4px solid #f44336',
+    'warning': '4px solid #ff9800',
+    'info': '4px solid #2196F3'
+  }[type] || '4px solid #2196F3';
+
+  window.setElementText(titleEl, title);
+  messageEl.innerHTML = window.escapeHtml(message);
+
+  if (onClose) {
+    okBtn._customOnClose = onClose;
+  }
+
+  modal.style.display = 'flex';
+  okBtn.focus();
+
+  okBtn.onclick = function() {
+    modal.style.display = 'none';
+    if (okBtn._customOnClose) {
+      okBtn._customOnClose();
+      delete okBtn._customOnClose;
+    }
+  };
+};
+
+window.debounce = function(fn, delay = 300) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn.apply(this, args), delay);
+  };
+};
+
+window.throttle = function(fn, interval = 300) {
+  let lastCall = 0;
+  return function(...args) {
+    const now = Date.now();
+    if (now - lastCall >= interval) {
+      lastCall = now;
+      fn.apply(this, args);
+    }
+  };
+};
+
+console.log('Security and utility scripts loaded');
+</script>

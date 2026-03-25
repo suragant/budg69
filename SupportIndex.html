@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <div class="container" style="padding-top:18px;">
+    <div class="header" style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <h1>📋 งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</h1>
+          <div id="userEmail" style="font-size:13px;color:#666;"></div>
+        </div>
+        <div>
+          <button id="backBtn" class="btn btn-secondary" onclick="window.history.back()">กลับ</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fff;padding:12px;border-radius:8px;margin-bottom:12px;box-shadow:0 4px 8px rgba(0,0,0,0.06);display:flex;align-items:center;gap:12px;">
+      <label>ปี:</label>
+      <select id="supportYear"></select>
+
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="color:#666;">เริ่มงบเดือน:</label>
+        <div style="padding:6px 10px;border-radius:6px;background:#f5f5f5;color:#333;font-weight:600;">ต.ค.</div>
+      </div>
+      <input type="hidden" id="supportFiscal" value="10">
+
+      <button id="supportLoad" class="btn btn-primary">โหลด</button>
+      <button id="supportExport" class="btn btn-secondary">Export PDF</button>
+    </div>
+
+    <!-- report area kept minimal: we will not auto-render quarterly here; only cards for recording -->
+    <div id="supportReport" style="background:#fff;padding:12px;border-radius:8px;min-height:120px;">
+      <div style="color:#666;padding:12px;">กำลังรอการโหลดงบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ...</div>
+    </div>
+
+    <!-- cards container -->
+    <div id="budgetContainer" class="budget-grid" style="margin-top:16px;"></div>
+  </div>
+
+  <!-- includes in the same order as main Index -->
+  <?!= include('JavaScript_helpers'); ?> 
+  <?!= include('JavaScript_modal_manager'); ?>    <!-- modal manager -->
+  <?!= include('JavaScript_alerts_manager'); ?>   <!-- alerts manager (provides showCustomAlert) -->
+  <?!= include('set_support_prefix_in_page'); ?>
+  <?!= include('client_rpc_adapter'); ?>          <!-- rpcWithRetry, rpcRecordSupportExpense, rpcRecordExpense -->
+  <?!= include('JavaScript_ui'); ?>
+  <?!= include('JavaScript_core'); ?>
+  <?!= include('JavaScript_actions'); ?>
+  <?!= include('JavaScript_export'); ?>
+
+  <!-- support client (expose functions) -->
+  <?!= include('support_client'); ?>
+  <?!= include('support_inline_quantity'); ?>
+  <?!= include('support_export'); ?>
+  <?!= include('showSupportView'); ?>
+</body>
+</html>

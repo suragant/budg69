@@ -1,0 +1,859 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
+
+.budget-grid,
+#budgetContainer,
+#supportBudgetContainer {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+  gap: 16px !important;
+  align-items: start !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+.budget-card {
+  display: block !important;
+  box-sizing: border-box !important;
+  background: #ffffff !important;
+  border: 1px solid #eee !important;
+  border-radius: 8px !important;
+  padding: 12px !important;
+  margin: 0 !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06) !important;
+  width: auto !important;
+  max-width: 100% !important;
+  overflow: visible !important;
+  position: relative !important;
+}
+
+.card-actions {
+  display: flex !important;
+  gap: 8px !important;
+  justify-content: flex-start !important;
+}
+
+/* ==================== RESET & BASE ==================== */
+* { 
+  margin: 0; 
+  padding: 0; 
+  box-sizing: border-box; 
+}
+
+body { 
+  font-family: 'Sarabun', Arial, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 20px;
+}
+
+/* ==================== LAYOUT ==================== */
+.container { 
+  max-width: 1400px; 
+  margin: 0 auto; 
+}
+
+.header { 
+  background: white; 
+  padding: 20px; 
+  border-radius: 10px; 
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+}
+
+.header h1 { 
+  color: #667eea; 
+  margin-bottom: 10px; 
+}
+
+#supportReport {
+  display: none !important;
+}
+
+/* ==================== BUTTONS ==================== */
+.btn { 
+  padding: 10px 20px; 
+  border: none; 
+  border-radius: 8px; 
+  cursor: pointer; 
+  font-weight: bold;
+  margin-left: 10px;
+  transition: all 0.2s ease;
+  font-family: 'Sarabun', Arial, sans-serif;
+}
+
+.btn-primary { 
+  background: #667eea; 
+  color: white; 
+}
+
+.btn-primary:hover { 
+  background: #5a67d8; 
+}
+
+.btn-secondary { 
+  background: #e0e0e0; 
+  color: #333; 
+}
+
+.btn-secondary:hover { 
+  background: #ccc; 
+}
+
+.btn-primary[disabled], 
+.cursor-not-allowed { 
+  background: #ccc !important; 
+  cursor: not-allowed !important; 
+}
+
+/* ==================== LOADING STATE ==================== */
+.loading { 
+  text-align: center; 
+  padding: 40px; 
+  color: white; 
+  font-size: 18px; 
+}
+
+/* ==================== BUDGET CARDS ==================== */
+.budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+}
+
+.budget-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.budget-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+}
+
+.card-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 15px 20px;
+  font-weight: bold;
+}
+
+.card-body { 
+  padding: 20px; 
+}
+
+.item-id {
+  font-size: 11px;
+  color: #999;
+  background: #f5f5f5;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 10px;
+  font-family: 'Courier New', monospace;
+}
+
+.detail-section {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.budget-summary {
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.summary-row:last-child { 
+  border-bottom: none; 
+}
+
+.amount-budget { 
+  color: #4CAF50; 
+  font-weight: bold; 
+}
+
+.amount-used { 
+  color: #FF9800; 
+  font-weight: bold; 
+}
+
+.amount-remaining { 
+  color: #2196F3; 
+  font-weight: bold; 
+}
+
+.progress-bar {
+  height: 10px;
+  background: #eee;
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #FF9800);
+  transition: width 0.5s ease;
+}
+
+.card-actions {
+  display: flex;
+  gap: 10px;
+  padding: 0 20px 20px 20px;
+}
+
+.card-actions .btn { 
+  flex: 1; 
+  padding: 12px; 
+  margin: 0;
+}
+
+/* ==================== MODALS ==================== */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(5px);
+}
+
+.modal.active { 
+  display: flex; 
+}
+
+.modal-content {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+  animation: fadeIn 0.3s ease;
+}
+
+.modal-content-large { 
+  max-width: 1200px; 
+}
+
+.modal-content-small { 
+  max-width: 450px; 
+}
+
+.modal-header {
+  border-bottom: 3px solid #667eea;
+  padding-bottom: 15px;
+  margin-bottom: 20px;
+}
+
+.modal-header h2 { 
+  color: #667eea; 
+}
+
+/* ==================== FORMS ==================== */
+.form-group { 
+  margin-bottom: 20px; 
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #333;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-family: 'Sarabun', Arial, sans-serif;
+  font-size: 14px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes fadeIn {
+  from { 
+    opacity: 0; 
+    transform: scale(0.9); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+}
+
+/* ==================== DASHBOARD ==================== */
+.dashboard-summary-box {
+  background: #e3f2fd;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  transition: background 0.2s ease;
+  cursor: default;
+}
+
+.dashboard-summary-box:nth-child(2) { 
+  background: #fff3e0; 
+}
+
+.dashboard-summary-box:nth-child(3) { 
+  background: #e8f5e9; 
+}
+
+.dashboard-summary-box > div:first-child { 
+  color: #666; 
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.dashboard-summary-box > div:last-child { 
+  font-size: 24px; 
+  font-weight: bold; 
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 768px) {
+  body {
+    padding: 10px;
+  }
+
+  .header {
+    padding: 15px;
+  }
+
+  .header > div {
+    flex-direction: column !important;
+    gap: 15px;
+  }
+
+  .budget-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-content {
+    width: 95%;
+    padding: 20px;
+  }
+
+  .modal-content-large {
+    max-width: 95%;
+  }
+
+  .btn {
+    margin-left: 0;
+    margin-top: 5px;
+  }
+
+  .filter-controls {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .filter-group {
+    width: 100%;
+  }
+
+  .filter-controls .btn {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .search-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==================== SEARCH & FILTER ==================== */
+.search-filter-section {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.search-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-label {
+  font-size: 13px;
+  color: #667eea;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.search-input {
+  padding: 10px 12px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-family: 'Sarabun', Arial, sans-serif;
+  font-size: 14px;
+  transition: border-color 0.3s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.search-input::placeholder {
+  color: #bbb;
+}
+
+.filter-controls {
+  display: flex;
+  gap: 15px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+
+.filter-select {
+  padding: 10px 12px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-family: 'Sarabun', Arial, sans-serif;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.filter-select:hover {
+  border-color: #999;
+}
+
+.filter-summary {
+  display: flex;
+  align-items: center;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+  font-size: 14px;
+  color: #666;
+}
+
+.filter-summary span {
+  font-weight: 600;
+}
+
+/* Highlight matched text in search */
+.highlight {
+  background-color: #fff59d;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: bold;
+}
+
+/* Badge for warning items */
+.warning-badge {
+  display: inline-block;
+  background: #FF9800;
+  color: white;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  margin-left: 8px;
+  font-weight: bold;
+}
+
+.critical-badge {
+  background: #ff4444;
+}
+
+/* ==================== PRINT STYLES (ปรับปรุง) ==================== */
+@media print {
+  /* Page size/margins */
+  @page {
+    size: A4;
+    margin: 10mm 10mm;
+  }
+
+  /* ปรับพื้นหลัง / สี ให้พิมพ์ได้ (Chrome: -webkit-print-color-adjust) */
+  html, body {
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    color: #000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    font-family: 'Sarabun', Arial, sans-serif !important;
+  }
+
+  /* ซ่อน UI ปกติที่ไม่ต้องการใน PDF */
+  .no-print,
+  .btn,
+  .print-btn,
+  .modal-actions,
+  .search-filter-section,
+  #alertBadge,
+  .cursor-not-allowed {
+    display: none !important;
+  }
+
+  /* ทำให้ container เต็มพื้นที่หน้าและไม่มี padding ที่เบียดเนื้อหา */
+  .container {
+    max-width: 100% !important;
+    padding: 8mm !important;
+    margin: 0 auto !important;
+  }
+
+  /* โมดัล ให้แสดงเนื้อหาแทน background overlay */
+  .modal {
+    display: block !important;
+    position: relative !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .modal-content {
+    max-width: 100% !important;
+    width: auto !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Header ที่เราเตรียมไว้สำหรับพิมพ์ — JS จะเปิดให้เป็น block ก่อน print */
+  #print-header {
+    display: none;
+    position: fixed;
+    top: 8mm;
+    left: 10mm;
+    right: 10mm;
+    z-index: 9999;
+    background: transparent;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* ถ้า #print-header visible ให้เนื้อหาดันลงเล็กน้อย (JS ปรับ margin-top ให้พอดี) */
+  .with-print-header {
+    margin-top: 28mm !important; /* JS จะปรับ margin-top เป็นพิกเซลที่เหมาะสมก่อนพิมพ์ */
+  }
+
+  /* หลีกเลี่ยง box-shadows / gradients ที่อาจพิมพ์แปลก */
+  .header, .budget-card, .card-header, .card-body, .dashboard-summary-box {
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  /* ปรับ table ให้ print-friendly */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+    word-break: break-word;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  thead {
+    display: table-header-group !important; /* ให้ browser ซ้ำหัวบนทุกหน้า */
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important; /* ห้ามตัดแถวกลางหน้า */
+    page-break-after: auto !important;
+  }
+
+  th, td {
+    padding: 6px 8px !important;
+    border: 1px solid #ddd !important;
+    vertical-align: middle !important;
+    font-size: 11pt !important;
+    box-sizing: border-box !important;
+    hyphens: auto !important;
+  }
+
+  /* ห้าม container ที่ครอบตารางทำ overflow: auto ในการพิมพ์ */
+  .table-wrapper, .modal-content, .container, #dashboardContainer, #workDetailContent {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  /* ปรับภาพ/ canvas ให้ไม่ล้นหน้า */
+  img, svg, canvas {
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Elements ที่ต้องการให้ไม่ถูกตัดขอบหน้า */
+  .dashboard-summary-box,
+  .budget-card,
+  .budget-summary,
+  .detail-section {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  /* ปรับสีเส้น/normal text ให้คมเวลา print */
+  .amount-budget, .amount-used, .amount-remaining {
+    color: #000 !important;
+  }
+
+  /* ถ้าจำเป็น สามารถซ่อน element ที่เป็น sticky/fixed ให้เป็น static */
+  .sticky, .fixed, header, .topbar, .modal-header {
+    position: static !important;
+  }
+
+  /* ถ้าเจอปัญหาตารางคอลัมน์เล็กเกิน ให้ปรับ font-size ลงเล็กน้อย */
+  @media print and (max-width: 210mm) {
+    th, td { font-size: 10pt !important; }
+  }
+}
+
+/* Helper class ใช้สำหรับซ่อนเฉพาะบนหน้าจอ (แต่ให้แสดงตอนพิมพ์) */
+@media screen {
+  .show-only-print {
+    display: none;
+  }
+}
+@media print {
+  .show-only-print {
+    display: block !important;
+  }
+}
+
+/* ==================== PRINT BUTTON ==================== */
+.print-btn {
+  background: #9C27B0;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  margin-left: 10px;
+  transition: all 0.2s ease;
+}
+
+.print-btn:hover {
+  background: #7B1FA2;
+}
+
+.print-btn { display: none !important; }
+
+/* reduce chart container height for exported document */
+.chart-container, .chart-wrapper, .modal-content canvas, canvas {
+  max-height: 360px !important; /* reduce height for export */
+  height: auto !important;
+}
+.dashboard-summary-box { margin-bottom: 8px !important; }
+
+/* ==================== FORM ERROR STYLES ==================== */
+.form-error {
+  color: #c00;
+  font-size: 12px;
+  margin-top: 5px;
+  display: none;
+}
+
+.form-input:invalid:focus {
+  border-color: #f44336;
+  box-shadow: 0 0 5px rgba(244, 67, 54, 0.3);
+}
+
+/* ==================== CUSTOM ALERT MODAL ==================== */
+#customAlertModal .modal-content {
+  border-left: 4px solid #2196F3;
+}
+
+#customAlertModal.alert-success .modal-content {
+  border-left-color: #4CAF50;
+}
+
+#customAlertModal.alert-error .modal-content {
+  border-left-color: #f44336;
+}
+
+#customAlertModal.alert-warning .modal-content {
+  border-left-color: #ff9800;
+}
+
+/* ==================== ERROR CONTAINER ==================== */
+#errorContainer {
+  padding: 15px;
+  margin-bottom: 20px;
+  background: #fee;
+  border: 1px solid #f99;
+  border-radius: 4px;
+  color: #c00;
+  line-height: 1.6;
+}
+
+#errorContainer ul {
+  margin: 10px 0 0 20px;
+  padding: 0;
+}
+
+#errorContainer li {
+  margin: 5px 0;
+}
+
+/* ==================== LOADING STATE ==================== */
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+  font-size: 16px;
+}
+
+/* ==================== MODAL IMPROVEMENTS ==================== */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.modal.show {
+  display: flex;
+}
+
+.modal-content {
+  background-color: #fafafa;
+  padding: 0;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f5f5f5;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.modal-actions {
+  padding: 15px 20px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* ==================== ACCESSIBILITY ==================== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Focus visible for keyboard navigation */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #2196F3;
+  outline-offset: 2px;
+}
+</style>

@@ -1,0 +1,354 @@
+<script>
+(function(){
+  console.log('showSupportView module loaded (patched)');
+
+  window.State = window.State || {};
+
+  var _backup = null;
+  var _removedBudgetContainer = null;
+  var _removedBudgetContainer_nextSibling = null;
+  var _createdSupportIds = ['supportPanelWrapper', 'supportBudgetContainer'];
+
+  // Backup current layout: store each child's display/pointerEvents so we can restore exactly
+  function backupCurrentLayout(){
+    try {
+      var main = document.querySelector('.container') || document.body;
+      if (!main) return;
+      var children = Array.from(main.children);
+      _backup = children.map(function(ch){
+        return {
+          node: ch,
+          id: ch.id || null,
+          styleDisplay: ch.style.display || '',
+          stylePointerEvents: ch.style.pointerEvents || '',
+          inlineStyle: ch.getAttribute && ch.getAttribute('style') || null
+        };
+      });
+      console.log('backupCurrentLayout: backed up %s children', _backup.length);
+    } catch (e) {
+      console.warn('backupCurrentLayout failed', e);
+      _backup = null;
+    }
+  }
+
+  // Restore layout internal: restore display/pointerEvents and reinsert removed budget container if needed
+  function restoreLayoutInternal(){
+    try {
+      var main = document.querySelector('.container') || document.body;
+      if (main && _backup && Array.isArray(_backup)) {
+        // Restore children styles
+        _backup.forEach(function(b){
+          try {
+            if (!b.node) return;
+            // only restore if element still in DOM
+            if (document.body.contains(b.node)) {
+              if (b.inlineStyle !== null) {
+                b.node.setAttribute('style', b.inlineStyle);
+              } else {
+                b.node.style.display = b.styleDisplay || '';
+                b.node.style.pointerEvents = b.stylePointerEvents || '';
+              }
+            }
+          } catch(e){}
+        });
+        console.log('restoreLayoutInternal: restored %s children', _backup.length);
+      }
+
+      // Re-insert removed budget container if it was removed earlier
+      if (_removedBudgetContainer) {
+        try {
+          var mainElem = document.querySelector('.container') || document.body;
+          if (_removedBudgetContainer_nextSibling && _removedBudgetContainer_nextSibling.parentNode === mainElem) {
+            mainElem.insertBefore(_removedBudgetContainer, _removedBudgetContainer_nextSibling);
+          } else {
+            mainElem.appendChild(_removedBudgetContainer);
+          }
+          // ensure visible
+          _removedBudgetContainer.style.display = '';
+          _removedBudgetContainer = null;
+          _removedBudgetContainer_nextSibling = null;
+          console.log('restoreLayoutInternal: reinserted removed budgetContainer');
+        } catch (e) {
+          console.warn('restoreLayoutInternal: reinsert budgetContainer failed', e);
+        }
+      }
+
+      // Remove support DOM nodes we created (wrapper + budget container) if still present
+      _createdSupportIds.forEach(function(id){
+        try {
+          var el = document.getElementById(id);
+          if (el && el.parentNode) {
+            el.parentNode.removeChild(el);
+            console.log('restoreLayoutInternal: removed created node', id);
+          }
+        } catch(e){}
+      });
+
+      // remove overlay/backdrop if present
+      var overlays = document.querySelectorAll('.modal-backdrop, .support-overlay, .overlay');
+      overlays.forEach(function(o){
+        try { if (o && o.parentNode) o.parentNode.removeChild(o); } catch(e){}
+      });
+
+      // restore body scroll
+      document.body.style.overflow = '';
+
+    } catch (e) {
+      console.warn('restoreLayoutInternal error', e);
+    }
+  }
+
+  function restoreLayout(){
+    restoreLayoutInternal();
+  }
+
+  function buildSupportDom(){
+    var main = document.querySelector('.container') || document.body;
+    var wrapper = document.createElement('div');
+    wrapper.id = 'supportPanelWrapper';
+    wrapper.style.background = '#fff';
+    wrapper.style.padding = '12px';
+    wrapper.style.borderRadius = '8px';
+    wrapper.style.marginBottom = '12px';
+    wrapper.style.boxShadow = '0 4px 8px rgba(0,0,0,0.06)';
+    wrapper.innerHTML = '\
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">\
+        <div style="font-size:18px;font-weight:700;color:#667eea;">📋 งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</div>\
+        <div><button id="supportBackBtn" class="btn btn-secondary">กลับ</button></div>\
+      </div>\
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">\
+        <label>ปี:</label>\
+        <select id="supportYear"></select>\
+        <div style="display:flex;align-items:center;gap:8px;"><label style="color:#666;">เริ่มงบเดือน:</label><div style="padding:6px 10px;border-radius:6px;background:#f5f5f5;color:#333;font-weight:600;">ต.ค.</div></div>\
+        <input type="hidden" id="supportFiscal" value="10">\
+        <button id="supportLoad" class="btn btn-primary">โหลด</button>\
+        <button id="supportExport" class="btn btn-secondary">Export PDF</button>\
+      </div>';
+
+    if(main.children && main.children.length > 0) main.insertBefore(wrapper, main.children[0]); else main.appendChild(wrapper);
+
+    // create container directly (no intermediate 'report' placeholder)
+    var sbc = document.getElementById('supportBudgetContainer');
+    if(!sbc){
+      sbc = document.createElement('div');
+      sbc.id = 'supportBudgetContainer';
+      sbc.className = 'budget-grid';
+      sbc.style.marginTop = '16px';
+      if(wrapper.nextSibling) main.insertBefore(sbc, wrapper.nextSibling); else main.appendChild(sbc);
+    }
+
+    try{ window._supportBudgetContainerId = 'supportBudgetContainer'; }catch(e){}
+
+    try{
+      var back = document.getElementById('supportBackBtn');
+      if(back) {
+        // remove previous handlers if any
+        back._support_back_handler && back.removeEventListener('click', back._support_back_handler);
+        var handler = function(e){
+          try { e && e.preventDefault && e.preventDefault(); } catch(e){}
+          try {
+            closeSupportView();
+            // if we pushed a history entry when opening, go back once to keep history consistent
+            try {
+              var qp = new URLSearchParams(location.search);
+              if (qp.get('page') === 'support' && history.length > 0) {
+                history.back();
+              }
+            } catch(e){}
+          } catch(err) { console.error('supportBack handler error', err); }
+        };
+        back.addEventListener('click', handler);
+        back._support_back_handler = handler;
+      }
+    }catch(e){ console.warn('back button binding failed', e); }
+
+    // allow pointer events
+    try{
+      [wrapper, sbc].forEach(function(el){
+        if(el){
+          el.style.pointerEvents = 'auto';
+          el.style.zIndex = el.style.zIndex || '1';
+        }
+      });
+    }catch(e){}
+
+    // populate year select (current year down to -4)
+    try {
+      var ysel = document.getElementById('supportYear');
+      if (ysel && ysel.options.length === 0) {
+        var thisYear = (new Date()).getFullYear();
+        for (var y = thisYear; y >= thisYear - 4; y--) {
+          var opt = document.createElement('option');
+          opt.value = y;
+          opt.text = y;
+          ysel.appendChild(opt);
+        }
+      }
+    } catch (e) { console.warn('populate supportYear failed', e); }
+
+    // bind load/export after a short delay so other includes can register helpers
+    setTimeout(function(){
+      try {
+        var loadBtn = document.getElementById('supportLoad');
+        if (loadBtn) {
+          loadBtn.addEventListener('click', function(){
+            try {
+              if (typeof window.loadSupportItemsList === 'function') {
+                window.loadSupportItemsList();
+              } else {
+                console.warn('loadSupportItemsList not available yet');
+              }
+            } catch (err) { console.error('supportLoad error', err); }
+          }, false);
+        }
+
+        var exportBtn = document.getElementById('supportExport');
+        if (exportBtn) {
+          exportBtn.addEventListener('click', function(e){
+            try { e && e.preventDefault && e.preventDefault(); } catch(_) {}
+            try {
+              // prefer client-side exporter if available
+              if (typeof window.initSupportExport === 'function') {
+                try { window.initSupportExport(); } catch(e){ console.warn('initSupportExport threw', e); }
+                setTimeout(function(){
+                  try {
+                    var ev = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+                    exportBtn.dispatchEvent(ev);
+                  } catch(e){ /* ignore */ }
+                }, 80);
+                return;
+              }
+
+              // fallback: call server inline export and open base64 PDF
+              var yearEl = document.getElementById('supportYear');
+              var fiscalEl = document.getElementById('supportFiscal');
+              var year = yearEl ? Number(yearEl.value) : (new Date()).getFullYear();
+              var fiscal = fiscalEl ? Number(fiscalEl.value) : 10;
+              if (window.google && google.script && typeof google.script.run === 'object') {
+                exportBtn.disabled = true;
+                var origText = exportBtn.innerHTML;
+                exportBtn.innerHTML = 'กำลังสร้าง PDF...';
+                google.script.run
+                  .withSuccessHandler(function(res){
+                    exportBtn.disabled = false;
+                    exportBtn.innerHTML = origText;
+                    if (!res || !res.success) return alert('สร้าง PDF ไม่สำเร็จ: ' + (res && res.message || 'Unknown'));
+                    var b64 = res.data && res.data.base64;
+                    if (!b64) return alert('server ไม่ส่งข้อมูล PDF');
+                    var dataUrl = 'data:application/pdf;base64,' + b64;
+                    fetch(dataUrl).then(function(r){ return r.blob(); }).then(function(blob){
+                      var url = URL.createObjectURL(blob);
+                      window.open(url, '_blank');
+                      setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 60*1000);
+                    }).catch(function(err){ console.error('blob creation failed', err); try{ window.open('data:application/pdf;base64,'+b64, '_blank'); }catch(e){ alert('ไม่สามารถเปิดไฟล์ PDF ได้'); }});
+                  })
+                  .withFailureHandler(function(err){
+                    exportBtn.disabled = false;
+                    exportBtn.innerHTML = origText;
+                    console.error('export failed', err);
+                    alert('เกิดข้อผิดพลาดขณะสร้าง PDF (ดู console)');
+                  })
+                  .exportSupportReportPdf_inline('monthly', { year: year, fiscalStartMonth: fiscal, includeLogo: false, fileName: 'Support_' + year });
+                return;
+              }
+
+              console.warn('No export mechanism available');
+            } catch (err) {
+              console.error('supportExport click error', err);
+            }
+          }, false);
+        }
+      } catch (e) {
+        console.warn('support button bindings failed', e);
+      }
+    }, 80);
+  } // end buildSupportDom
+
+  function tryInitSupportClientWithRetry(maxAttempts, intervalMs){
+    maxAttempts = maxAttempts || 20; intervalMs = intervalMs || 120;
+    var attempts = 0;
+    var tid = setInterval(function(){
+      attempts++;
+      try{
+        if(typeof window.initSupportClient === 'function'){ try{ window.initSupportClient(); }catch(e){} clearInterval(tid); return; }
+        if(typeof window.loadSupportItemsList === 'function'){ try{ window.loadSupportItemsList(); }catch(e){} clearInterval(tid); return; }
+      }catch(e){}
+      if(attempts >= maxAttempts){ clearInterval(tid); console.warn('Support client init retry timed out'); }
+    }, intervalMs);
+  }
+
+  function showSupportView(){
+    // backup layout once
+    try { backupCurrentLayout(); } catch(e){}
+    window._supportMode = true;
+    var main = document.querySelector('.container') || document.body;
+
+    try{
+      var bc = document.getElementById('budgetContainer');
+      if(bc){
+        _removedBudgetContainer_nextSibling = bc.nextSibling;
+        _removedBudgetContainer = bc;
+        if(bc.parentNode) bc.parentNode.removeChild(bc);
+        console.log('Support view: budgetContainer removed temporarily');
+      }
+    }catch(e){ console.warn('could not remove budgetContainer', e); }
+
+    // hide all non-support children
+    Array.from(main.children).forEach(function(ch){
+      try{
+        if(ch.id && (ch.id.indexOf('support') === 0 || ch.id === 'supportPanelWrapper' || ch.id === 'supportReport' || ch.id === 'supportBudgetContainer')) return;
+        ch.style.display = 'none';
+        try{ ch.style.pointerEvents = 'none'; }catch(e){}
+      }catch(e){}
+    });
+    try{ main.setAttribute('data-support-active','1'); }catch(e){}
+    buildSupportDom();
+    Array.from(document.querySelectorAll('#supportPanelWrapper, #supportBudgetContainer')).forEach(function(el){ el.style.display = ''; el.style.pointerEvents = 'auto'; });
+    tryInitSupportClientWithRetry(25, 120);
+    try{ history.pushState({page:'support'}, 'Support', window.location.pathname + '?page=support'); }catch(e){}
+    console.log('showSupportView done; supportMode=', !!window._supportMode);
+  }
+
+  function closeSupportView(){
+    try{
+      window._supportMode = false;
+      var main = document.querySelector('.container');
+      if(main){
+        main.removeAttribute('data-support-active');
+      }
+    }catch(e){}
+    // restore layout and cleanup
+    try { restoreLayout(); } catch(e){}
+    console.log('closeSupportView done; supportMode=', !!window._supportMode);
+  }
+
+  // popstate handling: keep UI in sync with history back/forward
+  window.addEventListener('popstate', function(e){
+    try {
+      var state = e.state || null;
+      if (state && state.page === 'support') {
+        // when navigating forward/back to the support state, ensure view visible
+        if (!window._supportMode) {
+          showSupportView();
+        }
+      } else {
+        // When leaving support state, ensure view closed
+        if (window._supportMode) {
+          closeSupportView();
+        }
+      }
+    } catch (err) { console.warn('popstate handler error', err); }
+  }, false);
+
+  window.showSupportView = showSupportView;
+  window.closeSupportView = closeSupportView;
+
+  // If URL already has page=support on load, open it
+  try{
+    var qp = new URLSearchParams(location.search);
+    if(qp.get('page') === 'support'){
+      setTimeout(function(){ showSupportView(); tryInitSupportClientWithRetry(25,120); }, 200);
+    }
+  }catch(e){}
+})();
+</script>

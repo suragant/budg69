@@ -1,0 +1,91 @@
+<script>
+/*
+ client_rpc_adapter.js (wrapped in <script> for Apps Script include)
+ - Provides rpcWithRetry + convenience rpcRecordSupportExpense/rpcRecordExpense wrappers.
+ - Safe to include on pages that call google.script.run directly.
+*/
+(function(window){
+  'use strict';
+  if (!window) return;
+  if (window.__wd_client_rpc_installed) return;
+  window.__wd_client_rpc_installed = true;
+
+  function _isRateLimitError(err) {
+    if (!err) return false;
+    try {
+      var s = String(err);
+      return /429|Too Many Requests|rate limit|RateLimit|QuotaExceeded|Quota exceeded/i.test(s);
+    } catch(e){ return false; }
+  }
+  function _sleep(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+
+  window.rpcWithRetry = window.rpcWithRetry || function(fnName, args, opts){
+    opts = opts || {};
+    var attempts = Math.max(1, opts.attempts || 4);
+    var baseDelay = opts.baseDelay || 400;
+    var maxDelay = opts.maxDelay || 5000;
+
+    // prefer wd_call / enqueueRpc if exist
+    if (typeof window.wd_call === 'function') {
+      try { return Promise.resolve(window.wd_call(fnName, args || [])); } catch(e) {}
+    }
+    if (typeof window.enqueueRpc === 'function') {
+      try {
+        return window.enqueueRpc(function(){
+          return new Promise(function(resolve, reject){
+            try {
+              if (!window.google || !google.script || !google.script.run) return reject(new Error('google.script.run not available'));
+              google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fnName].apply(null, args || []);
+            } catch(err){ reject(err); }
+          });
+        });
+      } catch(e){}
+    }
+
+    return new Promise(function(resolve, reject){
+      if (!(window.google && google.script && google.script.run)) {
+        return reject(new Error('No RPC mechanism available'));
+      }
+      var attempt = 0;
+      function callOnce(){
+        attempt++;
+        try {
+          google.script.run
+            .withSuccessHandler(function(res){ resolve(res); })
+            .withFailureHandler(function(err){
+              if (_isRateLimitError(err) && attempt < attempts) {
+                var expo = Math.min(maxDelay, baseDelay * Math.pow(2, attempt-1));
+                var jitter = expo * (0.5 + Math.random()*0.5);
+                console.warn('rpcWithRetry: retrying due to rate-limit in', Math.round(jitter),'ms', fnName, 'attempt', attempt);
+                _sleep(jitter).then(callOnce);
+                return;
+              }
+              reject(err);
+            })[fnName].apply(null, args || []);
+        } catch(e){
+          if (_isRateLimitError(e) && attempt < attempts) {
+            var expo2 = Math.min(maxDelay, baseDelay * Math.pow(2, attempt-1));
+            var jitter2 = expo2 * (0.5 + Math.random()*0.5);
+            _sleep(jitter2).then(callOnce);
+            return;
+          }
+          reject(e);
+        }
+      }
+      callOnce();
+    });
+  };
+
+  // convenience wrappers used by support inline UI
+  window.rpcRecordSupportExpense = window.rpcRecordSupportExpense || function(itemId, amount, description, expenseDate, quantity){
+    return window.rpcWithRetry('recordSupportExpenseSupport', [itemId, amount, description, expenseDate, quantity], { attempts: 4 })
+      .catch(function(err){ return { success:false, message: String(err) }; });
+  };
+
+  window.rpcRecordExpense = window.rpcRecordExpense || function(itemId, amount, description, expenseDate){
+    return window.rpcWithRetry('recordExpense', [itemId, amount, description, expenseDate], { attempts: 4 })
+      .catch(function(err){ return { success:false, message: String(err) }; });
+  };
+
+})(window);
+</script>

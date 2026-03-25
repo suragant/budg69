@@ -1,0 +1,395 @@
+<script>
+(function(window, document){
+  'use strict';
+
+  if (window.__budgetUiInstalled) return;
+  window.__budgetUiInstalled = true;
+
+  var State = window.State = window.State || {
+    allItems: [],
+    filteredItems: [],
+    budgetAlerts: [],
+    user: null,
+    selectedItem: null
+  };
+
+  function escapeHtmlSafe(value) {
+    if (typeof window.escapeHtml === 'function') return window.escapeHtml(value);
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function fmtCurrency(value) {
+    return Number(value || 0).toLocaleString('th-TH', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function usagePercent(item) {
+    var budget = Number(item && item.budget || 0);
+    var used = Number(item && item.used || 0);
+    if (!budget) return 0;
+    return Math.max(0, Math.min(100, (used / budget) * 100));
+  }
+
+  function progressColor(percent) {
+    if (percent >= 95) return '#f44336';
+    if (percent >= 90) return '#ff9800';
+    if (percent >= 80) return '#ffc107';
+    return '#4CAF50';
+  }
+
+  function setLoading(loading) {
+    var loadingDiv = document.getElementById('loadingDiv');
+    if (loadingDiv) loadingDiv.style.display = loading ? 'block' : 'none';
+  }
+
+  function setError(message) {
+    var errorContainer = document.getElementById('errorContainer');
+    if (!errorContainer) return;
+    if (!message) {
+      errorContainer.style.display = 'none';
+      errorContainer.textContent = '';
+      return;
+    }
+    errorContainer.style.display = 'block';
+    errorContainer.innerHTML = '<div style="padding:12px 16px;border-radius:8px;background:#fee;border:1px solid #f99;color:#b00020;">' + escapeHtmlSafe(message) + '</div>';
+  }
+
+  function setHeaderUser(user) {
+    var userEmail = document.getElementById('userEmail');
+    if (!userEmail) return;
+    var txt = (user && user.email) ? user.email : 'ไม่พบข้อมูลผู้ใช้';
+    if (user && user.department) txt += ' | ' + user.department;
+    if (typeof window.setElementText === 'function') window.setElementText(userEmail, txt);
+    else userEmail.textContent = txt;
+  }
+
+  function renderFilterSummary(items) {
+    var resultCount = document.getElementById('filterResultCount');
+    var filterWarning = document.getElementById('filterWarning');
+    var warningCount = document.getElementById('warningCount');
+    var count = Array.isArray(items) ? items.length : 0;
+    var warnings = (items || []).filter(function(item){ return usagePercent(item) >= 80; }).length;
+
+    if (resultCount) {
+      var message = 'แสดง ' + count.toLocaleString('th-TH') + ' รายการ';
+      if (typeof window.setElementText === 'function') window.setElementText(resultCount, message);
+      else resultCount.textContent = message;
+    }
+
+    if (filterWarning) filterWarning.style.display = warnings ? 'inline-block' : 'none';
+    if (warningCount) warningCount.textContent = String(warnings);
+  }
+
+  function createBudgetCard(item) {
+    item = item || {};
+    var percent = usagePercent(item);
+    var color = progressColor(percent);
+    var itemId = escapeHtmlSafe(item.itemId || '');
+    var work = escapeHtmlSafe(item.work || '-');
+    var budgetType = escapeHtmlSafe(item.budgetType || '-');
+    var itemName = escapeHtmlSafe(item.item || '-');
+    var department = escapeHtmlSafe(item.department || '-');
+
+    return ''
+      + '<article class="budget-card" data-item-id="' + itemId + '" data-work="' + work + '">'
+      + '  <div class="card-header">'
+      + '    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'
+      + '      <div>'
+      + '        <div class="item-id">' + itemId + '</div>'
+      + '        <div style="font-size:16px;font-weight:700;">' + itemName + '</div>'
+      + '      </div>'
+      + '      <div style="font-size:13px;font-weight:700;">' + percent.toFixed(1) + '%</div>'
+      + '    </div>'
+      + '  </div>'
+      + '  <div class="card-body">'
+      + '    <div class="detail-section">'
+      + '      <div><strong>หน่วยงาน:</strong> ' + department + '</div>'
+      + '      <div><strong>งาน:</strong> ' + work + '</div>'
+      + '      <div><strong>ประเภทงบ:</strong> ' + budgetType + '</div>'
+      + '    </div>'
+      + '    <div class="budget-summary">'
+      + '      <div class="summary-row"><span>งบประมาณ</span><span class="amount-budget">' + fmtCurrency(item.budget) + '</span></div>'
+      + '      <div class="summary-row"><span>เบิกจ่าย</span><span class="amount-used">' + fmtCurrency(item.used) + '</span></div>'
+      + '      <div class="summary-row"><span>คงเหลือ</span><span class="amount-remaining">' + fmtCurrency(item.remaining) + '</span></div>'
+      + '      <div class="progress-bar"><div class="progress-fill" style="width:' + percent.toFixed(1) + '%;background:' + color + ';"></div></div>'
+      + '    </div>'
+      + '  </div>'
+      + '  <div class="card-actions">'
+      + '    <button class="btn btn-primary record-btn" data-action="open-expense" data-id="' + itemId + '">บันทึก</button>'
+      + '    <button class="btn btn-secondary" data-action="view-history" data-id="' + itemId + '">ประวัติ</button>'
+      + '    <button class="btn btn-secondary" data-action="open-work-detail" data-work="' + work + '">รายละเอียดงาน</button>'
+      + '  </div>'
+      + '</article>';
+  }
+
+  function renderCards(items) {
+    var container = document.getElementById('budgetContainer');
+    if (!container) return;
+
+    var rows = Array.isArray(items) ? items : [];
+    container.style.display = 'grid';
+
+    if (!rows.length) {
+      container.innerHTML = '<div style="padding:24px;color:#666;background:#fff;border-radius:12px;">ไม่พบรายการที่ตรงกับตัวกรอง</div>';
+      renderFilterSummary([]);
+      return;
+    }
+
+    container.innerHTML = rows.map(createBudgetCard).join('');
+    renderFilterSummary(rows);
+  }
+
+  function ensureExpenseHiddenItemId() {
+    var form = document.getElementById('expenseForm');
+    if (!form) return null;
+    var input = document.getElementById('expenseItemId');
+    if (input) return input;
+    input = document.createElement('input');
+    input.type = 'hidden';
+    input.id = 'expenseItemId';
+    input.name = 'itemId';
+    form.appendChild(input);
+    return input;
+  }
+
+  function findItemById(itemId) {
+    var norm = String(itemId || '').trim();
+    return (State.allItems || []).find(function(item){
+      return String(item && item.itemId || '').trim() === norm;
+    }) || null;
+  }
+
+  function openExpense(itemId) {
+    var item = findItemById(itemId);
+    if (!item) {
+      setError('ไม่พบรายการสำหรับเปิดฟอร์มเบิกจ่าย');
+      return false;
+    }
+
+    State.selectedItem = item;
+    ensureExpenseHiddenItemId().value = item.itemId || '';
+    var modalDetails = document.getElementById('modalDetails');
+    if (modalDetails) {
+      modalDetails.innerHTML = '<strong>' + escapeHtmlSafe(item.item || item.itemId) + '</strong><br>คงเหลือ ' + fmtCurrency(item.remaining) + ' บาท';
+    }
+
+    var dateInput = document.getElementById('expenseDate');
+    if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+    var amountInput = document.getElementById('expenseAmount');
+    if (amountInput) amountInput.value = '';
+    var descInput = document.getElementById('expenseDescription');
+    if (descInput) descInput.value = '';
+    if (typeof window.displayFormErrors === 'function') window.displayFormErrors({});
+    if (typeof window.openModal === 'function') window.openModal('expenseModal');
+    return true;
+  }
+
+  function showHistory(history, currentUserEmail) {
+    var container = document.getElementById('historyContainer');
+    if (!container) return;
+
+    var rows = Array.isArray(history) ? history : [];
+    if (!rows.length) {
+      container.innerHTML = '<div style="padding:12px;color:#666;">ไม่พบประวัติรายการ</div>';
+      return;
+    }
+
+    currentUserEmail = String(currentUserEmail || '').trim().toLowerCase();
+    container.innerHTML = rows.map(function(entry){
+      var owner = String(entry.user || '').trim().toLowerCase();
+      var canEdit = owner && currentUserEmail && owner === currentUserEmail;
+      var statusColor = entry.status === 'CANCELLED' ? '#b00020' : (entry.status === 'EDITED' ? '#ef6c00' : '#2e7d32');
+      return ''
+        + '<div class="history-item" style="padding:12px;border:1px solid #eee;border-radius:10px;margin-bottom:10px;background:#fff;">'
+        + '  <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'
+        + '    <div>'
+        + '      <div style="font-weight:700;">' + fmtCurrency(entry.amount) + ' บาท</div>'
+        + '      <div style="color:#666;font-size:13px;">' + escapeHtmlSafe(entry.expenseDate || entry.timestamp || '-') + ' | ' + escapeHtmlSafe(entry.user || '-') + '</div>'
+        + '    </div>'
+        + '    <div style="font-size:12px;font-weight:700;color:' + statusColor + ';">' + escapeHtmlSafe(entry.status || 'ACTIVE') + '</div>'
+        + '  </div>'
+        + '  <div style="margin-top:8px;color:#444;">' + escapeHtmlSafe(entry.description || '-') + '</div>'
+        + '  <div style="margin-top:8px;font-size:12px;color:#666;">คงเหลือหลังรายการ: ' + fmtCurrency(entry.newRemaining) + '</div>'
+        + '  <div style="display:flex;gap:8px;margin-top:10px;">'
+        + (canEdit && entry.status !== 'CANCELLED'
+            ? '<button type="button" class="btn btn-secondary" data-role="edit-expense" data-log-row="' + escapeHtmlSafe(entry.logRowIndex) + '">แก้ไข</button>'
+              + '<button type="button" class="btn btn-secondary" data-role="cancel-expense" data-log-row="' + escapeHtmlSafe(entry.logRowIndex) + '">ยกเลิก</button>'
+            : '')
+        + '  </div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function openHistory(itemId) {
+    var item = findItemById(itemId) || { itemId: itemId };
+    State.selectedItem = item;
+
+    var details = document.getElementById('historyDetails');
+    if (details) details.innerHTML = '<strong>' + escapeHtmlSafe(item.item || item.itemId || '') + '</strong>';
+
+    var loading = document.getElementById('historyLoading');
+    var container = document.getElementById('historyContainer');
+    if (container) container.innerHTML = '';
+    if (loading) loading.style.display = 'block';
+    if (typeof window.openModal === 'function') window.openModal('historyModal');
+
+    var onSuccess = function(history) {
+      if (loading) loading.style.display = 'none';
+      showHistory(history || [], State.user && State.user.email);
+    };
+    var onFailure = function(err) {
+      if (loading) loading.style.display = 'none';
+      if (container) container.innerHTML = '<div style="padding:12px;color:#b00020;">' + escapeHtmlSafe(err && err.message ? err.message : String(err || 'โหลดประวัติไม่สำเร็จ')) + '</div>';
+    };
+
+    try {
+      if (typeof window.rpcWithRetry === 'function') {
+        window.rpcWithRetry('getTransactionHistory', [item.itemId]).then(onSuccess).catch(onFailure);
+        return true;
+      }
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).getTransactionHistory(item.itemId);
+        return true;
+      }
+    } catch (e) {
+      onFailure(e);
+    }
+    return false;
+  }
+
+  function ensureDashboardModal() {
+    var modal = document.getElementById('dashboardModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'dashboardModal';
+    modal.className = 'modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'dashboardModalTitle');
+    modal.innerHTML = ''
+      + '<div class="modal-content" style="max-width:1100px;">'
+      + '  <div class="modal-header"><h2 id="dashboardModalTitle">Dashboard</h2></div>'
+      + '  <div id="dashboardContainer" style="padding:16px;"></div>'
+      + '  <div class="modal-actions">'
+      + '    <button type="button" class="btn btn-secondary" data-action="close-modal" data-target="dashboardModal">ปิด</button>'
+      + '  </div>'
+      + '</div>';
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function renderDashboard(payload) {
+    var container = ensureDashboardModal().querySelector('#dashboardContainer');
+    if (!container) return;
+
+    var data = payload && payload.data ? payload.data : [];
+    if (!Array.isArray(data) || !data.length) {
+      container.innerHTML = '<div style="color:#666;">ไม่พบข้อมูล Dashboard</div>';
+      return;
+    }
+
+    var totalBudget = 0;
+    var totalUsed = 0;
+    var totalRemaining = 0;
+    data.forEach(function(row){
+      totalBudget += Number(row.totalBudget || 0);
+      totalUsed += Number(row.totalUsed || 0);
+      totalRemaining += Number(row.totalRemaining || 0);
+    });
+
+    var summary = ''
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;">'
+      + '  <div class="budget-card"><div class="card-body"><div style="color:#666;">งบรวม</div><div style="font-size:24px;font-weight:700;color:#2e7d32;">' + fmtCurrency(totalBudget) + '</div></div></div>'
+      + '  <div class="budget-card"><div class="card-body"><div style="color:#666;">ใช้ไป</div><div style="font-size:24px;font-weight:700;color:#ef6c00;">' + fmtCurrency(totalUsed) + '</div></div></div>'
+      + '  <div class="budget-card"><div class="card-body"><div style="color:#666;">คงเหลือ</div><div style="font-size:24px;font-weight:700;color:#1565c0;">' + fmtCurrency(totalRemaining) + '</div></div></div>'
+      + '</div>';
+
+    var rows = data.map(function(row){
+      return '<tr>'
+        + '<td>' + escapeHtmlSafe(row.work || '-') + '</td>'
+        + '<td style="text-align:right;">' + fmtCurrency(row.totalBudget) + '</td>'
+        + '<td style="text-align:right;">' + fmtCurrency(row.totalUsed) + '</td>'
+        + '<td style="text-align:right;">' + fmtCurrency(row.totalRemaining) + '</td>'
+        + '<td style="text-align:right;">' + Number(row.items || 0).toLocaleString('th-TH') + '</td>'
+        + '</tr>';
+    }).join('');
+
+    container.innerHTML = summary
+      + '<div class="table-wrapper">'
+      + '  <table id="dashboardSummaryTable" style="width:100%;border-collapse:collapse;">'
+      + '    <thead><tr><th style="text-align:left;">งาน</th><th style="text-align:right;">งบ</th><th style="text-align:right;">ใช้ไป</th><th style="text-align:right;">คงเหลือ</th><th style="text-align:right;">รายการ</th></tr></thead>'
+      + '    <tbody>' + rows + '</tbody>'
+      + '  </table>'
+      + '</div>';
+  }
+
+  function showDashboard() {
+    var modal = ensureDashboardModal();
+    var container = modal.querySelector('#dashboardContainer');
+    if (container) container.innerHTML = '<div style="color:#666;">กำลังโหลด Dashboard...</div>';
+    if (typeof window.openModal === 'function') window.openModal(modal);
+
+    var onSuccess = function(res) { renderDashboard(res || {}); };
+    var onFailure = function(err) {
+      if (container) container.innerHTML = '<div style="color:#b00020;">' + escapeHtmlSafe(err && err.message ? err.message : String(err || 'โหลด Dashboard ไม่สำเร็จ')) + '</div>';
+    };
+
+    try {
+      if (typeof window.rpcWithRetry === 'function') {
+        window.rpcWithRetry('getDashboardData', []).then(onSuccess).catch(onFailure);
+        return;
+      }
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).getDashboardData();
+      }
+    } catch (e) {
+      onFailure(e);
+    }
+  }
+
+  window.setBudgetLoading = window.setBudgetLoading || setLoading;
+  window.setBudgetError = window.setBudgetError || setError;
+  window.createBudgetCard = window.createBudgetCard || createBudgetCard;
+  window.renderCards = window.renderCards || renderCards;
+  window.displayData = window.displayData || function(payload) {
+    var section = document.getElementById('searchFilterSection');
+    var container = document.getElementById('budgetContainer');
+
+    if (!payload || payload.success === false) {
+      setLoading(false);
+      setError(payload && payload.message ? payload.message : 'ไม่สามารถโหลดข้อมูลได้');
+      if (section) section.style.display = 'none';
+      if (container) container.style.display = 'none';
+      return;
+    }
+
+    State.user = payload.user || State.user || null;
+    State.allItems = Array.isArray(payload.items) ? payload.items.slice() : [];
+    State.filteredItems = State.allItems.slice();
+    State.budgetAlerts = Array.isArray(payload.alerts) ? payload.alerts.slice() : (State.budgetAlerts || []);
+
+    setHeaderUser(State.user);
+    setError('');
+    setLoading(false);
+    if (section) section.style.display = 'block';
+    if (container) container.style.display = 'grid';
+    renderCards(State.filteredItems);
+  };
+  window.openExpense = window.openExpense || openExpense;
+  window.showHistory = window.showHistory || showHistory;
+  window.openHistory = window.openHistory || openHistory;
+  window.showDashboard = window.showDashboard || showDashboard;
+  window.showAlerts = window.showAlerts || function() {
+    if (typeof window.openAlertsModal === 'function') return window.openAlertsModal();
+    if (typeof window.showCustomAlert === 'function') return window.showCustomAlert('info', 'แจ้งเตือน', 'ยังไม่มีระบบแสดงแจ้งเตือน');
+  };
+})(window, document);
+</script>

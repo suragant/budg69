@@ -1,0 +1,209 @@
+<script>
+/*
+  support_inline_quantity_patched.js
+  - Patched inline quick-entry script for Support cards.
+  - Behavior:
+    * Normalizes itemId on client before sending.
+    * Uses window.rpcRecordSupportExpense if available (preferred), otherwise falls back to google.script.run.
+    * Updates UI by reloading support items (loadSupportItemsList) and using showCustomAlert when available.
+    * Lightweight fallback normalization if clientNormalizeItemId isn't available.
+*/
+(function(){
+  // local fallback normalizer if global not present
+  function _fallbackNormalize(id) {
+  try {
+    if (id === null || id === undefined) return '';
+    var s = String(id).trim();
+    if (!s) return '';
+    // normalize NBSP and separators
+    s = s.replace(/\u00A0/g,' ').replace(/[\s\-_]+/g,' ').trim();
+
+    // prefix+digits like SP69-001, SP69 1, SP69001, SP69_1
+    var m = s.match(/^([A-Za-z0-9]+)[\-\s_]*0*?(\d+)$/);
+    if (m) {
+      var prefix = m[1];
+      var num = parseInt(m[2],10);
+      if (!isNaN(num)) return prefix + '-' + String(num).padStart(3,'0');
+    }
+
+    // last numeric block fallback
+    var any = s.match(/([A-Za-z\-\_ ]*)(\d+)\s*$/);
+    if (any) {
+      var rawPrefix = (any[1] || '').replace(/[\s\-_]+$/,'').trim();
+      var num2 = parseInt(any[2],10);
+      if (!isNaN(num2)) {
+        var pref = rawPrefix ? rawPrefix.replace(/[^A-Za-z0-9]/g,'') : null;
+        if (!pref) {
+          // prefer support-specific default when available
+          pref = (typeof window !== 'undefined' && window._supportDefaultPrefix) ? window._supportDefaultPrefix : 'BG69';
+        }
+        return pref + '-' + String(num2).padStart(3,'0');
+      }
+    }
+
+    // numeric-only -> use support default prefix when set, else keep historic BG69
+    if (/^\d+$/.test(s)) {
+      var defaultPref = (typeof window !== 'undefined' && window._supportDefaultPrefix) ? window._supportDefaultPrefix : 'BG69';
+      return defaultPref + '-' + String(parseInt(s,10)).padStart(3,'0');
+    }
+
+    return s;
+  } catch(e){ return String(id||''); }
+}
+
+  function getNormalizer() {
+    if (typeof window.clientNormalizeItemId === 'function') return window.clientNormalizeItemId;
+    return _fallbackNormalize;
+  }
+
+  function createInlineUi(cardEl, itemId) {
+    if (!cardEl || !itemId) return null;
+    if (cardEl.querySelector('.support-inline-entry')) return null;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'support-inline-entry';
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.gap = '8px';
+    wrapper.style.marginTop = '10px';
+
+    const qty = document.createElement('input');
+    qty.type = 'number';
+    qty.min = '0';
+    qty.step = '1';
+    qty.placeholder = 'จำนวน';
+    qty.style.width = '90px';
+    qty.className = 'input-qty';
+
+    const amt = document.createElement('input');
+    amt.type = 'number';
+    amt.min = '0';
+    amt.step = '0.01';
+    amt.placeholder = 'จำนวนเงิน';
+    amt.style.width = '140px';
+    amt.className = 'input-amount';
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-primary';
+    btn.textContent = 'บันทึกเร็ว';
+
+    const note = document.createElement('input');
+    note.type = 'text';
+    note.placeholder = 'หมายเหตุ (สั้น)';
+    note.style.width = '180px';
+    note.className = 'input-note';
+
+    wrapper.appendChild(qty);
+    wrapper.appendChild(amt);
+    wrapper.appendChild(note);
+    wrapper.appendChild(btn);
+
+    const detailArea = cardEl.querySelector('.detail-section') || cardEl;
+    detailArea.appendChild(wrapper);
+
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังบันทึก...';
+
+      var qVal = Number(qty.value || 0) || 0;
+      var aVal = Number(amt.value || 0) || 0;
+      var noteVal = note.value || '';
+      if (qVal <= 0 && aVal <= 0) {
+        try { if (typeof window.showCustomAlert === 'function') window.showCustomAlert('แจ้งเตือน','กรุณากรอกจำนวนหรือจำนวนเงิน (อย่างน้อยหนึ่งค่า)','info'); else alert('กรุณากรอกจำนวนหรือจำนวนเงิน (อย่างน้อยหนึ่งค่า)'); } catch(e){}
+        btn.disabled = false;
+        btn.textContent = 'บันทึกเร็ว';
+        return;
+      }
+
+      var normalizer = getNormalizer();
+      var normalizedId = '';
+      try { normalizedId = normalizer(itemId || (cardEl.getAttribute && cardEl.getAttribute('data-item-id')) || ''); } catch(e){ normalizedId = _fallbackNormalize(itemId); }
+
+      var today = new Date().toISOString().split('T')[0];
+
+      // choose RPC helper if present
+      var rpc = (typeof window.rpcRecordSupportExpense === 'function') ? window.rpcRecordSupportExpense : null;
+
+      // Promise that performs the server call
+      var callPromise;
+      if (rpc) {
+        try {
+          callPromise = Promise.resolve(rpc(normalizedId, aVal, noteVal, today, qVal));
+        } catch(e) {
+          callPromise = Promise.reject(e);
+        }
+      } else if (window.google && google.script && google.script.run && typeof google.script.run.recordSupportExpenseSupport === 'function') {
+        callPromise = new Promise(function(resolve, reject){
+          try {
+            google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).recordSupportExpenseSupport(normalizedId, aVal, noteVal, today, qVal);
+          } catch(err){ reject(err); }
+        });
+      } else {
+        callPromise = Promise.resolve({ success:false, message: 'No RPC available' });
+      }
+
+      callPromise.then(function(res){
+        try {
+          btn.disabled = false;
+          btn.textContent = 'บันทึกเร็ว';
+          if (!res || !res.success) {
+            var msg = (res && res.message) ? res.message : 'บันทึกล้มเหลว';
+            try { if (typeof window.showCustomAlert === 'function') window.showCustomAlert('❌ บันทึกล้มเหลว', msg, 'error'); else alert('บันทึกล้มเหลว: ' + msg); } catch(e){}
+            return;
+          }
+          // success: refresh support list (best-effort)
+          try { if (typeof window.loadSupportItemsList === 'function') window.loadSupportItemsList(); } catch(e){}
+          try { if (typeof window.showCustomAlert === 'function') window.showCustomAlert('✅ บันทึกสำเร็จ', res.message || 'บันทึกข้อมูลเรียบร้อย', 'success'); } catch(e){}
+        } catch(inner){
+          console.error('quick save success handler error', inner);
+          btn.disabled = false;
+          btn.textContent = 'บันทึกเร็ว';
+        }
+      }).catch(function(err){
+        btn.disabled = false;
+        btn.textContent = 'บันทึกเร็ว';
+        console.error('Quick save failed', err);
+        try { if (typeof window.showCustomAlert === 'function') window.showCustomAlert('❌ เกิดข้อผิดพลาด', String(err), 'error'); else alert('เกิดข้อผิดพลาดขณะบันทึก: ' + String(err)); } catch(e){}
+      });
+    });
+
+    return wrapper;
+  }
+
+  function attachInlineQuickEntry() {
+    try {
+      const containerId = (window._supportBudgetContainerId && String(window._supportBudgetContainerId)) ? String(window._supportBudgetContainerId) : 'budgetContainer';
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const cards = Array.from(container.querySelectorAll('[data-item-id], [data-id]')).map(el => {
+        if (el.classList && el.classList.contains('budget-card')) return el;
+        const card = el.closest && el.closest('.budget-card');
+        return card || el;
+      }).filter(Boolean);
+
+      const unique = [];
+      const seen = new Set();
+      for (const c of cards) {
+        const id = c.getAttribute && (c.getAttribute('data-item-id') || c.getAttribute('data-id'));
+        if (!id) continue;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        unique.push({ card: c, id: id });
+      }
+
+      unique.forEach(x => {
+        try { createInlineUi(x.card, x.id); } catch(e){ console.warn('createInlineUi failed for', x.id, e); }
+      });
+    } catch (e) {
+      console.error('attachInlineQuickEntry error', e);
+    }
+  }
+
+  window.attachSupportInlineQuickEntry = attachInlineQuickEntry;
+
+  try {
+    setTimeout(() => { /* no auto-run; leave to caller */ }, 160);
+  } catch(e){}
+})();
+</script>

@@ -1,0 +1,282 @@
+<script>
+(function(){
+  'use strict';
+
+  // Idempotent guard
+  if (window._workdetailUiFixesInstalled) {
+    console.debug('workdetail-ui-fixes: already installed');
+    return;
+  }
+  window._workdetailUiFixesInstalled = true;
+
+  // ---- Styles ----
+  function addWorkdetailTableStyles() {
+    var marker = 'style[data-for="workdetail-table-fixes"]';
+    if (document.querySelector(marker)) return;
+    var css = '\
+      #workDetailContent table, #workDetailContent table th, #workDetailContent table td { box-sizing: border-box !important; }\
+      #workDetailContent table { table-layout: fixed !important; width: 100% !important; border-collapse: collapse !important; word-break: break-word !important; overflow-wrap: anywhere !important; -ms-word-break: break-all !important; font-size: 13px; }\
+      #workDetailContent table th, #workDetailContent table td { white-space: normal !important; padding: 6px 8px !important; vertical-align: top !important; }\
+      #workDetailContent table th:first-child, #workDetailContent table td:first-child { width: 14% !important; min-width: 110px; }\
+      #workDetailContent table th:nth-child(3), #workDetailContent table td:nth-child(3) { width: 40% !important; }\
+      @media (max-width: 900px) { #workDetailContent table { font-size: 12px; } #workDetailContent table th:first-child, #workDetailContent table td:first-child { width: 20%; } }\
+      .wd-action-btn { white-space: nowrap; }\
+      .wd-action-loading { opacity: 0.7; pointer-events: none; }\
+    ';
+    var s = document.createElement('style');
+    s.setAttribute('data-for', 'workdetail-table-fixes');
+    s.appendChild(document.createTextNode(css));
+    document.head.appendChild(s);
+  }
+
+  // ---- Helpers ----
+  function normalizeText(t){ return (t||'').toString().trim().toLowerCase(); }
+
+  function isPersonnelBudget(text){
+    if (!text) return false;
+    var t = normalizeText(text);
+    if (/\bงบ.*บุคลากร\b/.test(t) || /\bงบบุคลากร\b/.test(t)) return true;
+    if (/\bบุคลากร\b/.test(t) && /\bงบ\b/.test(t)) return true;
+    return false;
+  }
+
+  function looksLikeExportButton(btn){
+    if (!btn) return false;
+    try {
+      var txt = normalizeText(btn.innerText || btn.textContent || '');
+      if (txt.includes('export') || txt.includes('pdf') || txt.includes('ส่งออก') ) return true;
+      var da = (btn.getAttribute && btn.getAttribute('data-action')) || '';
+      if (da && (da.toLowerCase().includes('export') || da.toLowerCase().includes('pdf'))) return true;
+      var cls = btn.className || '';
+      if (cls && (/export|pdf/i).test(cls)) return true;
+    } catch(e){}
+    return false;
+  }
+
+  // Create a compatible "ดูรายการ" button that preserves data-action and data-work so delegated handler picks it up
+  function makeViewListButtonPreservingAttrs(originalBtn, tr, label){
+    label = label || '🔎 ดูรายการ';
+    var btn = document.createElement('button');
+    try {
+      btn.className = originalBtn && originalBtn.className ? originalBtn.className + ' wd-action-btn' : 'wd-action-btn btn btn-primary';
+    } catch(e){ btn.className = 'wd-action-btn btn btn-primary'; }
+    btn.type = (originalBtn && originalBtn.type) ? originalBtn.type : 'button';
+    btn.innerHTML = label;
+
+    // derive work name from row or original attributes
+    var workName = '';
+    try {
+      var workCell = tr && tr.querySelector ? tr.querySelector('td:first-child') : null;
+      if (workCell) workName = (workCell.textContent || workCell.innerText || '').trim();
+      if (!workName && originalBtn && originalBtn.getAttribute) workName = originalBtn.getAttribute('data-work') || (originalBtn.dataset && originalBtn.dataset.work) || '';
+    } catch(e){}
+
+    if (workName) btn.setAttribute('data-work', workName);
+    // ensure delegated handler sees it as open-work-detail
+    btn.setAttribute('data-action', 'open-work-detail');
+
+    // copy a few attrs useful for styling/id
+    try {
+      ['title','aria-label','data-id','data-row-id','id'].forEach(function(attr){
+        try {
+          var v = originalBtn.getAttribute && originalBtn.getAttribute(attr);
+          if (v && !btn.getAttribute(attr)) btn.setAttribute(attr, v);
+        } catch(e){}
+      });
+    } catch(e){}
+
+    // Non-invasive: do NOT call preventDefault/stopPropagation so document-level delegation works.
+    // Add short delayed fallback: if modal not opened by delegated handler, call fallback showWorkExpenseTypes
+    btn.addEventListener('click', function(){
+      setTimeout(function(){
+        try {
+          var modal = document.getElementById('workDetailModal') || document.querySelector('.workdetail, .workdetail-modal');
+          var modalOpen = modal && (modal.classList && (modal.classList.contains('active') || modal.classList.contains('open')) || (modal.style && modal.style.display && modal.style.display !== 'none') || (modal.getBoundingClientRect && modal.getBoundingClientRect().height > 8));
+          if (!modalOpen) {
+            var w = btn.getAttribute('data-work') || '';
+            if (w && typeof window.showWorkExpenseTypes === 'function') {
+              try { window.showWorkExpenseTypes(w); return; } catch(err){ console.warn('fallback showWorkExpenseTypes threw', err); }
+            }
+            // final fallback event for other listeners
+            var evt = new CustomEvent('workdetail-view-list', { detail: { rowElement: tr, work: w }, bubbles: true, cancelable: true });
+            tr.dispatchEvent(evt);
+          }
+        } catch(e){ console.warn('workdetail fallback check error', e); }
+      }, 150);
+    }, { passive: true });
+
+    return btn;
+  }
+
+  // Legacy-style view-list button that tries several fallback handlers when clicked
+  function makeViewListButtonFallback(originalBtn, tr, label){
+    label = label || '🔎 ดูรายการ';
+    var btn = document.createElement('button');
+    btn.className = originalBtn && originalBtn.className ? originalBtn.className + ' wd-action-btn' : 'wd-action-btn';
+    btn.type = originalBtn && originalBtn.type ? originalBtn.type : 'button';
+    btn.innerHTML = label;
+
+    // copy attrs
+    try {
+      ['title','aria-label','data-id','data-row-id'].forEach(function(attr){
+        var v = originalBtn && originalBtn.getAttribute && originalBtn.getAttribute(attr);
+        if (v) btn.setAttribute(attr, v);
+      });
+    } catch(e){}
+
+    btn.addEventListener('click', function(){
+      // dispatch event first (non-invasive)
+      var evt = new CustomEvent('workdetail-view-list', { detail: { rowElement: tr }, bubbles: true, cancelable: true });
+      btn.dispatchEvent(evt);
+
+      // best-effort fallbacks
+      try {
+        var rowId = btn.getAttribute && (btn.getAttribute('data-id') || btn.getAttribute('data-row-id') || '');
+        if (rowId && typeof window.showWorkDetailById === 'function') {
+          window.showWorkDetailById(rowId);
+          return;
+        }
+        if (typeof window.showBudgetTypeItems === 'function') {
+          var cells = tr.querySelectorAll('td');
+          var work = cells[0] ? (cells[0].innerText || cells[0].textContent).trim() : '';
+          var bt = cells[1] ? (cells[1].innerText || cells[1].textContent).trim() : '';
+          if (work) { window.showBudgetTypeItems(work, bt || ''); return; }
+        }
+        if (typeof window.showWorkExpenseTypes === 'function') {
+          var cells2 = tr.querySelectorAll('td');
+          var work2 = cells2[0] ? (cells2[0].innerText || cells2[0].textContent).trim() : '';
+          if (work2) { window.showWorkExpenseTypes(work2); return; }
+        }
+      } catch(e){ console.warn('view-list fallback handlers failed', e); }
+    }, { passive: true });
+
+    return btn;
+  }
+
+  // Bind prepare button that may call async prepare fn (data-prepare-fn)
+  function bindPrepareButton(btn) {
+    if (!btn || btn._wd_prepare_bound) return;
+    btn._wd_prepare_bound = true;
+    var origHtml = btn.innerHTML;
+    btn.addEventListener('click', function(){
+      try {
+        btn.classList.add('wd-action-loading');
+        btn.dataset._origHtml = btn.dataset._origHtml || origHtml;
+        btn.innerHTML = '<span class="wd-action-btn">⏳ กำลังเตรียม...</span>';
+        var fnName = btn.getAttribute && btn.getAttribute('data-prepare-fn');
+        if (fnName && typeof window[fnName] === 'function') {
+          try {
+            var res = window[fnName]();
+            if (res && typeof res.then === 'function') {
+              res.then(function(){
+                btn.classList.remove('wd-action-loading');
+                btn.innerHTML = '<span class="wd-action-btn">📄 Export PDF</span>';
+              }).catch(function(){
+                btn.classList.remove('wd-action-loading');
+                btn.innerHTML = btn.dataset._origHtml || '<span class="wd-action-btn">📄 Export PDF</span>';
+              });
+              return;
+            }
+          } catch(e){}
+        }
+        var inline = btn.getAttribute && btn.getAttribute('onclick');
+        if (inline) {
+          try { (new Function(inline)).call(btn); } catch(e){}
+        }
+        setTimeout(function(){
+          btn.classList.remove('wd-action-loading');
+          btn.innerHTML = btn.dataset._origHtml || '<span class="wd-action-btn">📄 Export PDF</span>';
+        }, 1500);
+      } catch(err) {
+        console.warn('prepare handler error', err);
+        btn.classList.remove('wd-action-loading');
+        btn.innerHTML = btn.dataset._origHtml || '<span class="wd-action-btn">📄 Export PDF</span>';
+      }
+    }, { passive: true });
+  }
+
+  // Main fixer: replace export-like buttons on personnel-budget rows, and bind prepare buttons
+  function fixActionButtonsInWorkDetail(){
+    try {
+      var container = document.getElementById('workDetailContent') || document.querySelector('.workdetail') || document.body;
+      if (!container) return;
+      var table = container.querySelector('table');
+      if (!table) return;
+      var tbody = table.querySelector('tbody');
+      if (!tbody) return;
+
+      Array.prototype.forEach.call(tbody.querySelectorAll('tr'), function(tr){
+        try {
+          var tds = tr.querySelectorAll('td');
+          if (!tds || tds.length === 0) return;
+          var col0 = tds[0] ? (tds[0].innerText || tds[0].textContent || '') : '';
+          var col1 = tds[1] ? (tds[1].innerText || tds[1].textContent || '') : '';
+          var combined = (col0 + ' ' + col1).trim();
+
+          var actionCell = tr.querySelector('td:last-child') || tr.querySelector('td[role="action"]') || tr.querySelector('td:nth-last-child(1)');
+          if (!actionCell) return;
+
+          var primaryBtn = actionCell.querySelector('button, a, .btn');
+          if (!primaryBtn) return;
+
+          // bind prepare buttons
+          var txt = normalizeText(primaryBtn.innerText || primaryBtn.textContent || '');
+          if (txt.includes('เตรียม') || txt.includes('prepare')) {
+            bindPrepareButton(primaryBtn);
+            return;
+          }
+
+          // replace export button with view-list when personnel budget heuristics match
+          if (isPersonnelBudget(combined) && looksLikeExportButton(primaryBtn)) {
+            var newBtn = makeViewListButtonPreservingAttrs(primaryBtn, tr, '🔎 ดูรายละเอียด');
+            try {
+              primaryBtn.parentNode && primaryBtn.parentNode.replaceChild(newBtn, primaryBtn);
+              newBtn.dataset._wd_replaced = '1';
+              console.debug('workdetail-ui-fix: replaced export button with view-list for personnel row');
+            } catch(e){
+              // fallback: append & remove old
+              try { actionCell.appendChild(newBtn); primaryBtn.remove(); } catch(e){}
+            }
+            return;
+          }
+
+        } catch(e){ console.warn('fixActionButtonsInWorkDetail row error', e); }
+      });
+    } catch(e){ console.warn('fixActionButtonsInWorkDetail error', e); }
+  }
+
+  // Observe dynamic changes and re-run fixer (debounced)
+  function observeWorkDetailChanges(){
+    var container = document.getElementById('workDetailContent') || document.querySelector('.workdetail') || document.body;
+    if (!container) return;
+    if (window._workdetailFixObserver) return;
+    try {
+      window._workdetailFixObserver = new MutationObserver(function(muts){
+        if (window._wd_fix_timeout) clearTimeout(window._wd_fix_timeout);
+        window._wd_fix_timeout = setTimeout(function(){ try { fixActionButtonsInWorkDetail(); } catch(e){ console.warn(e); } }, 150);
+      });
+      window._workdetailFixObserver.observe(container, { childList: true, subtree: true, attributes: true, characterData: false });
+    } catch(e){ console.warn('observeWorkDetailChanges install failed', e); }
+  }
+
+  // Init
+  function initWorkdetailUiFixes(){
+    try {
+      addWorkdetailTableStyles();
+      fixActionButtonsInWorkDetail();
+      observeWorkDetailChanges();
+      // extra runs for late-rendered content
+      setTimeout(fixActionButtonsInWorkDetail, 600);
+      setTimeout(fixActionButtonsInWorkDetail, 2000);
+      console.debug('workdetail-ui-fixes initialized');
+    } catch(e){ console.error('initWorkdetailUiFixes error', e); }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initWorkdetailUiFixes);
+  } else {
+    initWorkdetailUiFixes();
+  }
+
+})();
+</script>

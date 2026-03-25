@@ -1,0 +1,347 @@
+<!--
+  SkeletonLoader.html
+  ใช้งาน: เพิ่ม <?!= include('SkeletonLoader'); ?> ใน Index.html
+  วางไว้ก่อน loadingDiv และ budgetContainer
+
+  วิธี integrate:
+  1. เพิ่มไฟล์นี้เข้า GAS project
+  2. ใน Index.html แทนที่ส่วน loadingDiv + budgetContainer ด้วย include นี้
+  3. displayData() จะซ่อน skeleton และแสดง cards จริงอัตโนมัติ
+-->
+
+<!-- ==================== SKELETON STYLES ==================== -->
+<style>
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+
+.sk-pulse {
+  background: linear-gradient(90deg, #e8e8e8 25%, #f5f5f5 50%, #e8e8e8 75%);
+  background-size: 600px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+#skeletonSection {
+  display: block;
+}
+
+#skeletonSection.hidden {
+  display: none !important;
+}
+
+/* Header bar skeleton */
+.sk-header-bar {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sk-title-block { display: flex; flex-direction: column; gap: 8px; }
+.sk-title       { width: 340px; height: 24px; }
+.sk-subtitle    { width: 220px; height: 14px; }
+
+.sk-btn-group { display: flex; gap: 10px; }
+.sk-btn       { width: 110px; height: 38px; border-radius: 8px; }
+
+/* Search bar skeleton */
+.sk-search-bar {
+  background: white;
+  border-radius: 10px;
+  padding: 16px 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.07);
+  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.sk-input { height: 38px; border-radius: 6px; }
+
+/* Card grid skeleton */
+.sk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+}
+
+.sk-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.sk-card-header {
+  height: 56px;
+  background: linear-gradient(135deg, #d0d5f7 0%, #c8b8e8 100%);
+}
+
+.sk-card-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sk-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.sk-line-sm   { height: 12px; border-radius: 4px; }
+.sk-line-md   { height: 16px; border-radius: 4px; }
+.sk-line-full { width: 100%; }
+.sk-w-40      { width: 40%; }
+.sk-w-50      { width: 50%; }
+.sk-w-60      { width: 60%; }
+.sk-w-30      { width: 30%; }
+
+.sk-ring {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sk-summary {
+  border: 2px solid #eee;
+  border-radius: 8px;
+  padding: 10px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sk-card-actions {
+  display: flex;
+  gap: 10px;
+  padding: 0 20px 20px 20px;
+}
+
+.sk-action-btn {
+  flex: 1;
+  height: 44px;
+  border-radius: 8px;
+}
+
+/* ซ่อน loadingDiv เดิมเมื่อ skeleton แสดงอยู่ */
+#skeletonSection:not(.hidden) ~ #loadingDiv {
+  display: none !important;
+}
+</style>
+
+<!-- ==================== SKELETON MARKUP ==================== -->
+<div id="skeletonSection" aria-label="กำลังโหลด" aria-busy="true" role="status">
+
+  <!-- Header skeleton -->
+  <div class="sk-header-bar">
+    <div class="sk-title-block">
+      <div class="sk-pulse sk-title"></div>
+      <div class="sk-pulse sk-subtitle"></div>
+    </div>
+    <div class="sk-btn-group">
+      <div class="sk-pulse sk-btn"></div>
+      <div class="sk-pulse sk-btn"></div>
+      <div class="sk-pulse sk-btn"></div>
+    </div>
+  </div>
+
+  <!-- Search bar skeleton -->
+  <div class="sk-search-bar">
+    <div class="sk-pulse sk-input"></div>
+    <div class="sk-pulse sk-input"></div>
+    <div class="sk-pulse sk-input"></div>
+    <div class="sk-pulse sk-input"></div>
+  </div>
+
+  <!-- Card grid skeleton — 6 cards (ปรับได้ตาม viewport) -->
+  <div class="sk-grid" id="skeletonGrid">
+
+    <!-- Card template ซ้ำ 6 ครั้ง -->
+    <div class="sk-card">
+      <div class="sk-card-header"></div>
+      <div class="sk-card-body">
+        <div class="sk-row">
+          <div class="sk-pulse sk-line-sm sk-w-40"></div>
+          <div class="sk-pulse sk-ring"></div>
+        </div>
+        <div class="sk-pulse sk-line-sm sk-w-60"></div>
+        <div class="sk-summary">
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+        </div>
+      </div>
+      <div class="sk-card-actions">
+        <div class="sk-pulse sk-action-btn"></div>
+        <div class="sk-pulse sk-action-btn"></div>
+      </div>
+    </div>
+
+    <div class="sk-card">
+      <div class="sk-card-header"></div>
+      <div class="sk-card-body">
+        <div class="sk-row">
+          <div class="sk-pulse sk-line-sm sk-w-50"></div>
+          <div class="sk-pulse sk-ring"></div>
+        </div>
+        <div class="sk-pulse sk-line-sm sk-w-40"></div>
+        <div class="sk-summary">
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+        </div>
+      </div>
+      <div class="sk-card-actions">
+        <div class="sk-pulse sk-action-btn"></div>
+        <div class="sk-pulse sk-action-btn"></div>
+      </div>
+    </div>
+
+    <div class="sk-card">
+      <div class="sk-card-header"></div>
+      <div class="sk-card-body">
+        <div class="sk-row">
+          <div class="sk-pulse sk-line-sm sk-w-60"></div>
+          <div class="sk-pulse sk-ring"></div>
+        </div>
+        <div class="sk-pulse sk-line-sm sk-w-50"></div>
+        <div class="sk-summary">
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+        </div>
+      </div>
+      <div class="sk-card-actions">
+        <div class="sk-pulse sk-action-btn"></div>
+        <div class="sk-pulse sk-action-btn"></div>
+      </div>
+    </div>
+
+    <div class="sk-card">
+      <div class="sk-card-header"></div>
+      <div class="sk-card-body">
+        <div class="sk-row">
+          <div class="sk-pulse sk-line-sm sk-w-40"></div>
+          <div class="sk-pulse sk-ring"></div>
+        </div>
+        <div class="sk-pulse sk-line-sm sk-w-60"></div>
+        <div class="sk-summary">
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+        </div>
+      </div>
+      <div class="sk-card-actions">
+        <div class="sk-pulse sk-action-btn"></div>
+        <div class="sk-pulse sk-action-btn"></div>
+      </div>
+    </div>
+
+    <div class="sk-card">
+      <div class="sk-card-header"></div>
+      <div class="sk-card-body">
+        <div class="sk-row">
+          <div class="sk-pulse sk-line-sm sk-w-50"></div>
+          <div class="sk-pulse sk-ring"></div>
+        </div>
+        <div class="sk-pulse sk-line-sm sk-w-40"></div>
+        <div class="sk-summary">
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+        </div>
+      </div>
+      <div class="sk-card-actions">
+        <div class="sk-pulse sk-action-btn"></div>
+        <div class="sk-pulse sk-action-btn"></div>
+      </div>
+    </div>
+
+    <div class="sk-card">
+      <div class="sk-card-header"></div>
+      <div class="sk-card-body">
+        <div class="sk-row">
+          <div class="sk-pulse sk-line-sm sk-w-60"></div>
+          <div class="sk-pulse sk-ring"></div>
+        </div>
+        <div class="sk-pulse sk-line-sm sk-w-50"></div>
+        <div class="sk-summary">
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+          <div class="sk-row"><div class="sk-pulse sk-line-sm sk-w-30"></div><div class="sk-pulse sk-line-md sk-w-40"></div></div>
+        </div>
+      </div>
+      <div class="sk-card-actions">
+        <div class="sk-pulse sk-action-btn"></div>
+        <div class="sk-pulse sk-action-btn"></div>
+      </div>
+    </div>
+
+  </div><!-- /sk-grid -->
+</div><!-- /skeletonSection -->
+
+<!-- ==================== SKELETON CONTROLLER ==================== -->
+<script>
+(function () {
+  'use strict';
+
+  // ซ่อน skeleton และแสดงของจริงเมื่อ displayData() ถูกเรียก
+  var _origDisplayData = window.displayData;
+
+  function hideSkeleton() {
+    try {
+      var sk = document.getElementById('skeletonSection');
+      if (sk) sk.classList.add('hidden');
+    } catch (e) {}
+  }
+
+  // Wrap displayData ที่มีอยู่แล้ว
+  function wrapDisplayData() {
+    if (typeof window.displayData === 'function' && !window.displayData.__skWrapped) {
+      var orig = window.displayData;
+      window.displayData = function (payload) {
+        hideSkeleton();
+        return orig.apply(this, arguments);
+      };
+      window.displayData.__skWrapped = true;
+    }
+  }
+
+  // ถ้า displayData โหลดแล้ว wrap ทันที
+  if (typeof window.displayData === 'function') {
+    wrapDisplayData();
+  } else {
+    // รอ JavaScript_core โหลดเสร็จก่อน
+    var attempts = 0;
+    var tid = setInterval(function () {
+      attempts++;
+      if (typeof window.displayData === 'function') {
+        wrapDisplayData();
+        clearInterval(tid);
+      }
+      if (attempts > 50) clearInterval(tid); // timeout 5s
+    }, 100);
+  }
+
+  // Fallback: ซ่อน skeleton เองถ้า 12 วินาทีผ่านไปแล้วยังไม่มีข้อมูล
+  setTimeout(function () {
+    var sk = document.getElementById('skeletonSection');
+    if (sk && !sk.classList.contains('hidden')) {
+      hideSkeleton();
+    }
+  }, 12000);
+
+})();
+</script>

@@ -1,0 +1,535 @@
+<script>
+/*
+  support_modal_manager3.js (patched)
+  - Original behavior preserved.
+  - Patch (integrated): ensure "ประวัติ" / open-history buttons are reliably handled.
+    * Accepts data-action "open-history" plus variants.
+    * Attaches pointerdown+click handlers directly to buttons and uses a MutationObserver
+      to re-attach after re-renders.
+    * Uses existing clientNormalizeItemId / openHistoryModal / __support_on_btn if present.
+    * Idempotent: won't attach multiple times on repeated loads.
+  - Replace existing support_modal_manager3.js with this file.
+*/
+(function(){
+  var LONG_NAME = 'งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ';
+
+  function hideOtherModalsKeep(keepId){
+    try{
+      Array.from(document.querySelectorAll('.modal')).forEach(function(m){
+        try{
+          if(!m || m.id === keepId) return;
+          if(m.classList && m.classList.contains('active')) m.classList.remove('active');
+          try{ m.style.pointerEvents = 'none'; }catch(e){}
+        }catch(e){}
+      });
+      Array.from(document.querySelectorAll('.modal-backdrop:not(.app-managed), .dialog-backdrop, .backdrop, .overlay')).forEach(function(el){
+        try{ if(el && el.parentNode) el.parentNode.removeChild(el); }catch(e){}
+      });
+    }catch(e){ console.warn('hideOtherModalsKeep error', e); }
+  }
+
+  function debugModalCount(){
+    try{
+      var modals = Array.from(document.querySelectorAll('.modal'));
+      var visible = modals.filter(function(m){ return m.classList.contains('active') || (m.style.display && m.style.display !== 'none'); });
+      var backdrops = Array.from(document.querySelectorAll('.modal-backdrop, .dialog-backdrop, .backdrop, .overlay'));
+      console.log('MODAL COUNT total=', modals.length, 'visible=', visible.length, 'backdrops=', backdrops.length);
+    }catch(e){}
+  }
+
+  // Helper: choose appropriate container id (try support-specific ids then fallback to main only when support mode active)
+  function _resolveSupportContainerId() {
+    try {
+      if (window._supportBudgetContainerId && document.getElementById(window._supportBudgetContainerId)) return String(window._supportBudgetContainerId);
+      if (document.getElementById('supportBudgetContainer')) return 'supportBudgetContainer';
+      var main = document.querySelector('.container') || document.body;
+      var supportActive = main && main.getAttribute && main.getAttribute('data-support-active') === '1';
+      if (supportActive && document.getElementById('budgetContainer')) return 'budgetContainer';
+      return null;
+    } catch(e) {
+      return null;
+    }
+  }
+
+  // ----------------------------
+  // Client-side normalization helper
+  // ----------------------------
+  function clientNormalizeItemId(id) {
+    try {
+      if (id === null || id === undefined) return '';
+      var s = String(id).trim();
+      if (!s) return '';
+
+      s = s.replace(/\u00A0/g,' ').replace(/[\s\-_]+/g,' ').trim();
+
+      var m = s.match(/^([A-Za-z0-9]+)[\-\s_]*0*?(\d+)$/);
+      if (m) {
+        var prefix = m[1];
+        var num = parseInt(m[2], 10);
+        if (!isNaN(num)) {
+          return prefix + '-' + String(num).padStart(3, '0');
+        }
+      }
+
+      var any = s.match(/([A-Za-z\-\_ ]*)(\d+)\s*$/);
+      if (any) {
+        var rawPrefix = (any[1] || '').replace(/[\s\-_]+$/,'').trim();
+        var num2 = parseInt(any[2], 10);
+        if (!isNaN(num2)) {
+          var pref = rawPrefix ? rawPrefix.replace(/[^A-Za-z0-9]/g,'') : null;
+          if (!pref) {
+            pref = (typeof window !== 'undefined' && window._supportDefaultPrefix) ? window._supportDefaultPrefix : 'BG69';
+          }
+          return pref + '-' + String(num2).padStart(3, '0');
+        }
+      }
+
+      if (/^\d+$/.test(s)) {
+        var defaultPref = (typeof window !== 'undefined' && window._supportDefaultPrefix) ? window._supportDefaultPrefix : 'BG69';
+        return defaultPref + '-' + String(parseInt(s,10)).padStart(3,'0');
+      }
+
+      return s;
+    } catch(e) {
+      console.warn('clientNormalizeItemId failed for', id, e);
+      return String(id || '');
+    }
+  }
+
+  try { window.clientNormalizeItemId = window.clientNormalizeItemId || clientNormalizeItemId; } catch(e){}
+
+  // ----------------------------
+  // Server call helper
+  // ----------------------------
+  function callServer(fnName, args) {
+    args = args || [];
+    if (typeof window.rpcWithRetry === 'function') {
+      try { return Promise.resolve(window.rpcWithRetry(fnName, args)); } catch (e) { console.warn('callServer: rpcWithRetry failed', e); }
+    }
+    if (typeof window.wd_call === 'function') {
+      try { return Promise.resolve(window.wd_call(fnName, args)); } catch (e) { console.warn('callServer: wd_call failed', e); }
+    }
+    if (typeof window.enqueueRpc === 'function') {
+      try {
+        return window.enqueueRpc(function(){
+          return new Promise(function(resolve, reject){
+            try {
+              if (!window.google || !google.script || !google.script.run) return reject(new Error('google.script.run not available'));
+              google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fnName].apply(null, args || []);
+            } catch(err){ reject(err); }
+          });
+        });
+      } catch(e){ console.warn('callServer: enqueueRpc failed', e); }
+    }
+    return new Promise(function(resolve, reject){
+      try {
+        if (!(window.google && google.script && google.script.run)) return reject(new Error('No RPC available'));
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fnName].apply(null, args || []);
+      } catch (err) { reject(err); }
+    });
+  }
+
+  // Provide a robust global handler invoked by inline onclick attributes
+  window.__support_on_btn = window.__support_on_btn || function(itemId, action){
+    try {
+      if (!itemId) return;
+      var orig = itemId;
+      try { itemId = (itemId===null||itemId===undefined) ? '' : String(itemId); } catch(e){ itemId = String(itemId || ''); }
+      var norm = clientNormalizeItemId(itemId);
+      try { console.debug('__support_on_btn', { orig: orig, normalized: norm, action: action }); } catch(e){}
+      if (action === 'history') {
+        if (typeof openHistoryModal === 'function') return openHistoryModal(norm);
+        if (typeof window.openHistory === 'function') return window.openHistory(norm);
+        return;
+      }
+      if (action === 'record') {
+        if (typeof openSupportExpenseModal === 'function') return openSupportExpenseModal(norm, '');
+        if (typeof window.openSupportExpenseModal === 'function') return window.openSupportExpenseModal(norm, '');
+        if (typeof window.openExpense === 'function') return window.openExpense(norm);
+        return;
+      }
+    } catch (e) { console.error('__support_on_btn error', e); }
+  };
+
+  function fallbackCardHtml(items){
+    if(!items || items.length === 0) return '<div style="padding:12px;color:#666;">ไม่มีรายการ</div>';
+    return items.map(function(it){
+      return '<div class="budget-card" data-item-id="'+escapeHtmlForPdf(it.itemId)+'" style="padding:12px;border:1px solid #eee;margin-bottom:10px;border-radius:8px;background:#fff;">' +
+             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+             '<div><strong>'+ escapeHtmlForPdf(it.itemId || '') +'</strong><div style="color:#555">'+ escapeHtmlForPdf(it.item || '') +'</div></div>' +
+             '<div style="text-align:right;"><div style="font-weight:700;color:#2a7f6f;">'+ (Number(it.remaining)||0).toLocaleString('th-TH',{minimumFractionDigits:2}) +'</div><div style="font-size:12px;color:#999;">คงเหลือ</div></div>' +
+             '</div>' +
+             '<div style="margin-top:8px;display:flex;gap:8px;">' +
+             '<button class="btn btn-primary record-btn" data-id="'+escapeHtmlForPdf(it.itemId)+'" onclick="window.__support_on_btn(\''+escapeHtmlForPdf(it.itemId)+'\', \'record\')">บันทึก</button>' +
+             '<button class="btn" data-action="view-history" data-id="'+escapeHtmlForPdf(it.itemId)+'" onclick="window.__support_on_btn(\''+escapeHtmlForPdf(it.itemId)+'\', \'history\')" style="background:#efefef;">ประวัติ</button>' +
+             '</div></div>';
+    }).join('');
+  }
+
+  // loadSupportItemsList
+  function loadSupportItemsList(opts){
+    opts = opts || {};
+    var maxAttempts = (typeof opts.maxAttempts === 'number') ? opts.maxAttempts : 30;
+    var intervalMs = (typeof opts.intervalMs === 'number') ? opts.intervalMs : 150;
+    var attempts = 0;
+
+    function _tryLoad(){
+      attempts++;
+      var containerId = _resolveSupportContainerId();
+      if (!containerId) {
+        if (attempts <= maxAttempts) { if (attempts === 1) console.warn('loadSupportItemsList: no container found — will retry.'); setTimeout(_tryLoad, intervalMs); return; } else { console.warn('loadSupportItemsList: no container found after retries'); return; }
+      }
+
+      var container = document.getElementById(containerId);
+      if(!container){
+        if (attempts <= maxAttempts) { setTimeout(_tryLoad, intervalMs); return; } else { console.warn('loadSupportItemsList: container not found after retries:', containerId); return; }
+      }
+
+      attempts = 0;
+      container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:#666;">กำลังโหลดรายการ ' + LONG_NAME + '...</div>';
+      try{
+        callServer('getSupportItemsSupport', []).then(function(res){
+          try {
+            if(!res || !res.success){
+              container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:red;">เกิดข้อผิดพลาด: '+ ((res && res.message) || 'Unknown') +'</div>';
+              return;
+            }
+
+            var items = (res.items || []).map(function(it){
+              var rawId = (it && (it.itemId || it.rowIndex)) ? (it.itemId || it.rowIndex) : '';
+              var itemIdClient = clientNormalizeItemId(rawId);
+              return {
+                itemId: itemIdClient,
+                rowIndex: it.rowIndex,
+                department: it.department || '',
+                work: it.area||it.department||'',
+                budgetType: it.budgetCategory||'',
+                category: it.category||'',
+                expenseType: it.expenseType||'',
+                item: it.item||'',
+                budget: Number(it.budget||0)||0,
+                used: Number(it.used||0)||0,
+                remaining: Number(it.remaining||0)||0,
+                quantityUsed: Number(it.quantityUsed||0)||0,
+                canEdit: true,
+                _raw: it
+              };
+            });
+
+            window.State = window.State || {};
+            State.allItems = items;
+            State.filteredItems = items.slice();
+
+            try{
+              if (containerId === 'supportBudgetContainer' && typeof window.createBudgetCard === 'function') {
+                container.innerHTML = items.map(function(it){ return window.createBudgetCard(it || {}); }).join('');
+                try { if (typeof attachSupportInlineQuickEntry === 'function') attachSupportInlineQuickEntry(); } catch(e){}
+                try { bindSupportExpenseButtons(containerId); } catch(e){}
+              } else if (containerId === 'supportBudgetContainer' && typeof window.renderCards === 'function') {
+                container.innerHTML = items.map(function(it){ return (typeof window.createBudgetCard === 'function') ? window.createBudgetCard(it) : fallbackCardHtml([it]); }).join('');
+                try { bindSupportExpenseButtons(containerId); } catch(e){}
+              } else {
+                container.innerHTML = (items && items.length) ? items.map(function(it){
+                  return '<div class="budget-card" data-item-id="'+escapeHtmlForPdf(it.itemId)+'" style="padding:12px;border:1px solid #eee;margin-bottom:10px;border-radius:8px;background:#fff;">' +
+                         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                         '<div><strong>'+ escapeHtmlForPdf(it.itemId) +'</strong><div style="color:#555">'+ escapeHtmlForPdf(it.item||'') +'</div></div>' +
+                         '<div style="text-align:right;"><div style="font-weight:700;color:#2a7f6f;">'+ (Number(it.remaining)||0).toLocaleString('th-TH',{minimumFractionDigits:2}) +'</div><div style="font-size:12px;color:#999;">คงเหลือ</div></div>' +
+                         '</div>' +
+                         '<div class="card-actions" style="margin-top:8px;display:flex;gap:8px;">' +
+                         '<button class="btn btn-primary record-btn" data-id="'+escapeHtmlForPdf(it.itemId)+'" onclick="window.__support_on_btn(\''+escapeHtmlForPdf(it.itemId)+'\', \'record\')">บันทึก</button>' +
+                         '<button class="btn" data-action="view-history" data-id="'+escapeHtmlForPdf(it.itemId)+'" onclick="window.__support_on_btn(\''+escapeHtmlForPdf(it.itemId)+'\', \'history\')" style="background:#efefef;">ประวัติ</button>' +
+                         '</div></div>';
+                }).join('') : '<div style="padding:12px;color:#666;">ไม่มีรายการ</div>';
+                try { bindSupportExpenseButtons(containerId); } catch(e){}
+              }
+            }catch(e){
+              console.warn('render support items failed, fallback used', e);
+              container.innerHTML = fallbackCardHtml(items);
+            }
+
+            setTimeout(function(){ 
+              try { bindSupportExpenseButtons(containerId); } catch(e) { console.warn(e); }
+            }, 80);
+
+          } catch(inner){
+            console.error('loadSupportItemsList handler error', inner);
+            container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:red;">client error</div>';
+          }
+        }).catch(function(err){
+          console.warn('getSupportItemsSupport failed', err);
+          container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:red;">เกิดข้อผิดพลาด: '+ String(err) +'</div>';
+        });
+      }catch(e){
+        container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:red;">client error: '+ String(e) +'</div>';
+      }
+    }
+    _tryLoad();
+  }
+
+  // Lightweight delegation for support container events
+  function bindSupportExpenseButtons(containerId){
+    try{
+      var cid = containerId || _resolveSupportContainerId();
+      var container = document.getElementById(cid);
+      if(!container) return;
+
+      if(container._support_delegated && container._support_delegated.attached) return;
+
+      try{
+        if(container._support_delegated && container._support_delegated.detach){
+          container._support_delegated.detach();
+        }
+      }catch(e){}
+
+      // capture-phase diagnostic (non-invasive)
+      var captureHandler = function(e){
+        try{
+          var btn = e.target && e.target.closest && e.target.closest('[data-action], .record-btn, [data-id]');
+          if(!btn || !container.contains(btn)) return;
+          // keep non-invasive; used only for debugging if needed
+          // console.debug('support captureHandler saw', btn);
+        }catch(e){ console.warn('support captureHandler error', e); }
+      };
+
+      // bubble-phase: ensure history always triggers
+      var bubbleHandler = function(e){
+        try{
+          var btn = e.target && e.target.closest && e.target.closest('[data-action], .record-btn, [data-id]');
+          if(!btn || !container.contains(btn)) return;
+
+          // determine action, prefer data-action attribute
+          var action = (btn.getAttribute && (btn.getAttribute('data-action') || '').toLowerCase()) || '';
+          if (!action) {
+            // fallback: button text or class
+            var txt = (btn.innerText || btn.textContent || '').toLowerCase();
+            if (txt.indexOf('ประวัติ') !== -1 || txt.indexOf('history') !== -1) action = 'history';
+            else if (btn.classList && btn.classList.contains('record-btn')) action = 'record';
+          }
+
+          // If it's a history action, call openHistoryModal (normalized), always (robust)
+          if (action === 'view-history' || action === 'history') {
+            var id = (btn.getAttribute && (btn.getAttribute('data-id') || btn.getAttribute('data-item-id'))) || (btn.closest && btn.closest('.budget-card') && btn.closest('.budget-card').getAttribute('data-item-id')) || '';
+            if (!id) {
+              console.debug('support bubbleHandler: history clicked but no id found on button', btn);
+              return;
+            }
+            var norm = clientNormalizeItemId(id);
+            console.debug('support bubbleHandler: invoking history for', { raw:id, norm: norm });
+            // prefer dedicated history method
+            if (typeof openHistoryModal === 'function') {
+              try { openHistoryModal(norm); } catch(e){ console.warn('openHistoryModal threw', e); try { window.__support_on_btn && window.__support_on_btn(norm,'history'); }catch(_){} }
+            } else if (typeof window.openHistory === 'function') {
+              try { window.openHistory(norm); } catch(e){ console.warn('window.openHistory threw', e); try { window.__support_on_btn && window.__support_on_btn(norm,'history'); }catch(_){} }
+            } else {
+              // fallback to generic handler
+              try { window.__support_on_btn && window.__support_on_btn(norm,'history'); } catch(e){ console.warn('__support_on_btn history threw', e); }
+            }
+            // prevent double-processing by other handlers
+            try { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch(e){}
+            return;
+          }
+
+          // other actions: do nothing here (inline handlers handle record)
+        }catch(e){ console.warn('support bubbleHandler error', e); }
+      };
+
+      container.addEventListener('pointerdown', captureHandler, true);
+      container.addEventListener('touchstart', captureHandler, true);
+      container.addEventListener('click', bubbleHandler, false);
+
+      container._support_delegated = {
+        attached: true,
+        detach: function(){
+          try{ container.removeEventListener('pointerdown', captureHandler, true); }catch(e){}
+          try{ container.removeEventListener('touchstart', captureHandler, true); }catch(e){}
+          try{ container.removeEventListener('click', bubbleHandler, false); }catch(e){}
+          container._support_delegated = null;
+        }
+      };
+
+      // small debug hook
+      try { console.debug('bindSupportExpenseButtons: attached delegation to', cid); } catch(e){}
+    }catch(e){ console.warn('bindSupportExpenseButtons error', e); }
+  }
+
+  // initSupportClient_safe (unchanged)
+  function initSupportClient_safe() {
+    try {
+      if (initSupportClient_safe.__running) return;
+      initSupportClient_safe.__running = true;
+      initSupportClient_safe.__isReal = true;
+
+      var attempts = 0;
+      var tid = setInterval(function(){
+        attempts++;
+        try {
+          if (typeof window.loadSupportItemsList === 'function') {
+            try { window.loadSupportItemsList({ maxAttempts: 40, intervalMs: 150 }); } catch(e){ console.warn('initSupportClient_safe: loadSupportItemsList threw', e); }
+            clearInterval(tid);
+            initSupportClient_safe.__running = false;
+            return;
+          }
+          if (typeof window.bindSupportExpenseButtons === 'function') {
+            try { window.bindSupportExpenseButtons(); } catch(e){ /* ignore */ }
+          }
+        } catch(e) { /* ignore */ }
+
+        if (attempts >= 60) {
+          clearInterval(tid);
+          initSupportClient_safe.__running = false;
+          console.warn('initSupportClient_safe: timed out waiting for loadSupportItemsList');
+        }
+      }, 150);
+    } finally {}
+  }
+
+  try {
+    if (typeof window.initSupportClient === 'function') {
+      if (!window.initSupportClient.__isReal) {
+        window.initSupportClient = initSupportClient_safe;
+        window.initSupportClient.__isReal = true;
+      }
+    } else {
+      window.initSupportClient = initSupportClient_safe;
+      window.initSupportClient.__isReal = true;
+    }
+  } catch(e){
+    try { window._initSupportClient_safe = initSupportClient_safe; } catch(_) {}
+    console.warn('initSupportClient: safe install failed', e);
+  }
+
+  try{ if (typeof loadSupportItemsList === 'function') window.loadSupportItemsList = loadSupportItemsList; }catch(e){}
+  try{ if (typeof bindSupportExpenseButtons === 'function') window.bindSupportExpenseButtons = bindSupportExpenseButtons; }catch(e){}
+  try{ if (typeof debugModalCount === 'function') window.debugModalCount = debugModalCount; }catch(e){}
+
+  // Expose small debug helper
+  try {
+    window.debugSupportState = window.debugSupportState || function(limit){
+      try {
+        limit = Math.max(0, Number(limit) || 20);
+        var s = window.State && Array.isArray(window.State.allItems) ? window.State.allItems.slice(0, limit) : [];
+        console.log('debugSupportState sample:', s);
+        return s;
+      } catch(e){ console.warn('debugSupportState failed', e); return []; }
+    };
+  } catch(e){}
+
+  // ----------------------------
+  // Integrated history-button patch
+  // ----------------------------
+  (function installIntegratedHistoryPatch() {
+    try {
+      if (typeof window === 'undefined') return;
+      if (window.__support_history_patch_installed_in_modal_manager) {
+        // already installed
+        return;
+      }
+      window.__support_history_patch_installed_in_modal_manager = true;
+      console.debug('[support_modal_manager3] history patch initializing');
+
+      function _norm(id){
+        try { return (typeof window.clientNormalizeItemId === 'function') ? window.clientNormalizeItemId(id) : (id===null||id===undefined ? '' : String(id).replace(/\u00A0/g,' ').replace(/[\s\-_]+/g,' ').trim()); } catch(e){ return String(id||''); }
+      }
+
+      function handlerFactory(btn){
+        return function onHistoryClick(e){
+          try {
+            try { e && e.preventDefault && e.preventDefault(); e && e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch(_) {}
+            var id = (btn.getAttribute && (btn.getAttribute('data-id') || btn.getAttribute('data-item-id'))) ||
+                     (btn.dataset && (btn.dataset.id || btn.dataset.itemId || btn.dataset.item)) ||
+                     (btn.closest && btn.closest('.budget-card') && btn.closest('.budget-card').getAttribute('data-item-id')) || '';
+            if (!id) {
+              var anc = btn.closest && btn.closest('[data-item-id]');
+              if (anc) id = anc.getAttribute('data-item-id') || '';
+            }
+            var norm = _norm(id || '');
+            console.debug('[support_modal_manager3] history click captured', { raw:id, norm:norm, btn: btn });
+            if (typeof openHistoryModal === 'function') {
+              try { openHistoryModal(norm); return; } catch(err){ console.warn('openHistoryModal threw', err); }
+            }
+            if (typeof window.openHistory === 'function') {
+              try { window.openHistory(norm); return; } catch(err){ console.warn('openHistory threw', err); }
+            }
+            if (typeof window.__support_on_btn === 'function') {
+              try { window.__support_on_btn(norm, 'history'); return; } catch(err){ console.warn('__support_on_btn threw', err); }
+            }
+            console.warn('[support_modal_manager3] no history handler available for', norm);
+          } catch(e) {
+            console.error('[support_modal_manager3] history handler error', e);
+          }
+        };
+      }
+
+      function attachHistoryListeners(root){
+        try {
+          root = root || document.getElementById(window._supportBudgetContainerId || 'supportBudgetContainer') || document.getElementById('budgetContainer') || document.body;
+          if (!root) return;
+          // include open-history and open_history variants
+          var sel = [
+            'button[data-action="open-history"]',
+            'button[data-action="open_history"]',
+            'button[data-action="open-history"]',
+            'button[data-action="history"]',
+            'button[data-action="view-history"]',
+            '.budget-card button'
+          ].join(',');
+          var buttons = Array.from(root.querySelectorAll(sel));
+          buttons.forEach(function(btn){
+            try {
+              var da = (btn.getAttribute && (btn.getAttribute('data-action')||'')).toLowerCase();
+              var txt = (btn.innerText||btn.textContent||'').toLowerCase();
+              var looksLikeHistory = da.indexOf('history') !== -1 || txt.indexOf('ประวัติ') !== -1 || txt.indexOf('history') !== -1 || (btn.getAttribute && btn.getAttribute('onclick') && btn.getAttribute('onclick').toLowerCase().indexOf('history') !== -1);
+              if (!looksLikeHistory) return;
+              if (!btn.__support_history_listener_attached) {
+                var h = handlerFactory(btn);
+                try { btn.addEventListener('pointerdown', h, {capture:true, passive:false}); } catch(e){ try { btn.addEventListener('pointerdown', h, true); } catch(_){} }
+                try { btn.addEventListener('click', h, false); } catch(e){ try { btn.addEventListener('click', h, true); } catch(_){} }
+                btn.__support_history_listener_attached = true;
+                console.debug('[support_modal_manager3] attached history listener to', btn, 'data-action=', da);
+              }
+            } catch(e){ /* ignore per-button errors */ }
+          });
+        } catch(e){ console.warn('[support_modal_manager3] attachHistoryListeners error', e); }
+      }
+
+      function observeHistoryContainer(){
+        try {
+          var cid = window._supportBudgetContainerId || 'supportBudgetContainer';
+          var root = document.getElementById(cid);
+          if (!root) {
+            // re-check later if container not ready
+            setTimeout(observeHistoryContainer, 300);
+            return;
+          }
+          if (root.__support_history_observer_attached) {
+            attachHistoryListeners(root);
+            return;
+          }
+          var obs = new MutationObserver(function(mutations){
+            try { attachHistoryListeners(root); } catch(e){ console.warn('[support_modal_manager3] observer callback error', e); }
+          });
+          obs.observe(root, { childList: true, subtree: true });
+          root.__support_history_observer_attached = true;
+          root.__support_history_observer = obs;
+          attachHistoryListeners(root);
+          console.debug('[support_modal_manager3] history MutationObserver attached to', cid);
+        } catch(e){ console.warn('[support_modal_manager3] observeHistoryContainer failed', e); }
+      }
+
+      // run initial attach and observer
+      try {
+        attachHistoryListeners();
+        observeHistoryContainer();
+        // retries for slower renderers
+        setTimeout(function(){ attachHistoryListeners(); }, 300);
+        setTimeout(function(){ attachHistoryListeners(); }, 1000);
+      } catch(e){ console.warn('[support_modal_manager3] history patch init failed', e); }
+
+    } catch(err) {
+      console.error('[support_modal_manager3] installIntegratedHistoryPatch top-level error', err);
+    }
+  })();
+
+  // do not overwrite existing globals that are intentionally provided elsewhere
+})();
+</script>

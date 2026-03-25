@@ -1,0 +1,217 @@
+<script>
+(function(window, document){
+  'use strict';
+
+  function safeLog(...args){ try { console.debug.apply(console, args); } catch(e){} }
+
+  // small helper for binding flag
+  function markBound(el, flagName){
+    try { if (!el) return; el[flagName] = true; } catch(e){}
+  }
+  function isBound(el, flagName){
+    try { return !!(el && el[flagName]); } catch(e){ return false; }
+  }
+
+  // --- Export binding: only bind to existing export controls inside modals ---
+  function bindExportHandlersInModals(){
+    try {
+      // Dashboard modal: find export controls that already exist inside modal
+      const dashModal = document.getElementById('dashboardModal') || document.querySelector('#dashboardModal');
+      if (dashModal) {
+        const exports = Array.from(dashModal.querySelectorAll('[data-action="export-dashboard"], button, a, .btn')).filter(function(el){
+          try {
+            const txt = (el.innerText || el.textContent || '').toString().toLowerCase();
+            const da = (el.getAttribute && (el.getAttribute('data-action')||'')).toString().toLowerCase();
+            // match only explicit export controls or controls that clearly have export text
+            return da.indexOf('export-dashboard') !== -1 || /export/.test(txt) || /ส่งออก/.test(txt);
+          } catch(e){ return false; }
+        });
+        exports.forEach(function(btn){
+          if (!isBound(btn, '_wd_export_bound')) {
+            try {
+              btn.addEventListener('click', function(evt){
+                try {
+                  // prefer explicit capture functions if present
+                  if (typeof window.exportDashboardCapture === 'function') { window.exportDashboardCapture({ fileName: 'Dashboard.pdf' }); return; }
+                  if (typeof window.exportDashboard === 'function') { window.exportDashboard(); return; }
+                  if (typeof window.createPdfReport === 'function') {
+                    try {
+                      const html = (document.getElementById('dashboardContainer')||{}).innerHTML || (dashModal.querySelector('.modal-content')||{}).innerHTML || '';
+                      window.createPdfReport(html, 'Dashboard_Report', btn);
+                      return;
+                    } catch(e){}
+                  }
+                  if (typeof window.exportDashboardCoordinator === 'function') { window.exportDashboardCoordinator({ fileName: 'Dashboard.pdf' }); return; }
+                  // fallback alert
+                  try { alert('ไม่พบเครื่องมือสำหรับ Export PDF ในหน้าปัจจุบัน'); } catch(e){}
+                } catch(err) { console.error('export handler error', err); }
+              }, { passive:true });
+              markBound(btn, '_wd_export_bound');
+            } catch(e){ safeLog('bind export handler failed', e); }
+          }
+        });
+      }
+
+      // WorkDetail modal: bind to any export controls inside workDetailModal
+      const workModal = document.getElementById('workDetailModal') || document.querySelector('#workDetailModal');
+      if (workModal) {
+        const exports = Array.from(workModal.querySelectorAll('[data-action="export-workdetail"], button, a, .btn')).filter(function(el){
+          try {
+            const txt = (el.innerText || el.textContent || '').toString().toLowerCase();
+            const da = (el.getAttribute && (el.getAttribute('data-action')||'')).toString().toLowerCase();
+            return da.indexOf('export-workdetail') !== -1 || /export/.test(txt) || /ส่งออก/.test(txt);
+          } catch(e){ return false; }
+        });
+        exports.forEach(function(btn){
+          if (!isBound(btn, '_wd_export_bound')) {
+            try {
+              btn.addEventListener('click', function(evt){
+                try {
+                  if (typeof window.exportWorkDetailCapture === 'function') { window.exportWorkDetailCapture({ fileName: 'WorkDetail.pdf' }); return; }
+                  if (typeof window.exportCurrentDetail === 'function') { window.exportCurrentDetail(); return; }
+                  if (typeof window.createPdfReport === 'function') {
+                    try {
+                      const html = (workModal.querySelector('.modal-content')||{}).innerHTML || '';
+                      window.createPdfReport(html, 'WorkDetail_Report', btn);
+                      return;
+                    } catch(e){}
+                  }
+                  if (typeof window.exportDashboardCoordinator === 'function') { window.exportDashboardCoordinator({ fileName: 'WorkDetail.pdf' }); return; }
+                  try { alert('ไม่พบเครื่องมือสำหรับ Export PDF ของรายละเอียดงาน'); } catch(e){}
+                } catch(err) { console.error('export-workdetail handler error', err); }
+              }, { passive:true });
+              markBound(btn, '_wd_export_bound');
+            } catch(e){ safeLog('bind workdetail export handler failed', e); }
+          }
+        });
+      }
+    } catch(e){
+      console.warn('bindExportHandlersInModals error', e);
+    }
+  }
+
+  // --- Expense/Card save handler: idempotent bind ---
+  function ensureExpenseSaveHandler() {
+    try {
+      const expenseModal = document.getElementById('expenseModal') || document.querySelector('#expenseModal') || null;
+      const form = expenseModal ? (expenseModal.querySelector('form') || expenseModal.querySelector('form#expenseForm')) : (document.getElementById('expenseForm') || document.querySelector('#expenseModal form'));
+      let saveBtn = null;
+      if (form) saveBtn = form.querySelector('button[type="submit"], button.save-expense, button[data-action="record-expense"]');
+      if (!saveBtn) saveBtn = document.querySelector('#expenseModal button[data-action="record-expense"], #expenseForm button.save-expense, button.save-expense');
+
+      if (!form && !saveBtn) {
+        safeLog('ensureExpenseSaveHandler: expense form/button not found');
+        return false;
+      }
+
+      if (form && !isBound(form, '_wd_expense_bound')) {
+        form._wd_expense_bound = true;
+        form.addEventListener('submit', function(e){
+          e.preventDefault(); e.stopPropagation();
+          handleExpenseSubmit(form);
+        }, { passive:false });
+        safeLog('Expense form submit handler bound (shim)');
+      }
+
+      if (saveBtn && !isBound(saveBtn, '_wd_expense_click_bound')) {
+        saveBtn._wd_expense_click_bound = true;
+        saveBtn.addEventListener('click', function(e){
+          try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
+          const f = form || (document.getElementById('expenseForm') || document.querySelector('#expenseModal form'));
+          handleExpenseSubmit(f);
+        }, { passive:false });
+        safeLog('Expense save button click handler bound (shim)');
+      }
+      return true;
+    } catch(err) {
+      console.warn('ensureExpenseSaveHandler error', err);
+      return false;
+    }
+  }
+
+  function handleExpenseSubmit(form) {
+    try {
+      const amountEl = form ? (form.querySelector('#expenseAmount') || form.querySelector('input[name="expenseAmount"]') || form.querySelector('[name="amount"]')) : null;
+      const descEl = form ? (form.querySelector('#expenseDescription') || form.querySelector('textarea[name="expenseDescription"]') || form.querySelector('[name="description"]')) : null;
+      const dateEl = form ? (form.querySelector('#expenseDate') || form.querySelector('input[name="expenseDate"]')) : null;
+
+      const itemId = (window.State && State.selectedItem && State.selectedItem.itemId) || (form && (form.querySelector('[name="itemId"]') || form.querySelector('#expenseItemId')) && (form.querySelector('[name="itemId"]').value || form.querySelector('#expenseItemId').value)) || '';
+      const amountRaw = amountEl ? (amountEl.value || '').toString().trim() : '';
+      const description = descEl ? (descEl.value || '').toString().trim() : '';
+      const expenseDate = dateEl ? (dateEl.value || '').toString().trim() : '';
+
+      const amount = parseFloat(String(amountRaw).replace(/[^0-9\.\-]/g,'')) || 0;
+      if (!itemId) {
+        alert('ไม่พบรหัสรายการ (Item ID) ที่จะบันทึก กรุณาเปิด modal ของรายการก่อนบันทึก');
+        return;
+      }
+      if (!amount || amount <= 0) {
+        alert('กรุณาระบุจำนวนเงินที่ถูกต้อง (>0)');
+        return;
+      }
+
+      try { if (form) form.querySelectorAll('button,input').forEach(el => { try { el.disabled = true; } catch(e){} }); } catch(e){}
+
+      safeLog('Calling recordExpense', itemId, amount, description, expenseDate);
+      try {
+        google.script.run
+          .withSuccessHandler(function(res){
+            try {
+              safeLog('recordExpense success', res);
+              if (typeof showCustomAlert === 'function') showCustomAlert('✅ บันทึกสำเร็จ','รายการบันทึกเรียบร้อยแล้ว','success');
+              // refresh UI: prefer dedicated refresh functions if available
+              try { if (typeof window.applyFilters === 'function') window.applyFilters(); } catch(e){}
+              try { if (typeof window.loadData === 'function') { window.loadData(); } else if (typeof window.displayData === 'function' && window.State && Array.isArray(window.State.allItems)) { if (typeof window.renderCards === 'function') window.renderCards(window.State.filteredItems && window.State.filteredItems.length ? window.State.filteredItems : window.State.allItems); } } catch(e){}
+              // close modal
+              if (typeof closeModal === 'function') {
+                try { closeModal('expenseModal'); } catch(e){}
+              } else {
+                const em = document.getElementById('expenseModal');
+                if (em) em.classList.remove('active');
+              }
+            } finally {
+              try { if (form) form.querySelectorAll('button,input').forEach(el => { try { el.disabled = false; } catch(e){} }); } catch(_) {}
+            }
+          })
+          .withFailureHandler(function(err){
+            try { console.error('recordExpense failed', err); if (typeof showCustomAlert === 'function') showCustomAlert('❌ บันทึกไม่สำเร็จ', String(err), 'error'); } catch(e){}
+            try { if (form) form.querySelectorAll('button,input').forEach(el => { try { el.disabled = false; } catch(e){} }); } catch(_) {}
+          })
+          .recordExpense(itemId, amount, description, expenseDate);
+      } catch(err) {
+        console.error('google.script.run not available or recordExpense call failed', err);
+        if (typeof showCustomAlert === 'function') showCustomAlert('❌ เกิดข้อผิดพลาด', 'ไม่สามารถเรียกฟังก์ชันบันทึกไปยัง server ได้', 'error');
+        try { if (form) form.querySelectorAll('button,input').forEach(el => { try { el.disabled = false; } catch(e){} }); } catch(_) {}
+      }
+    } catch(err) {
+      console.error('handleExpenseSubmit error', err);
+    }
+  }
+
+  // --- Initialization: run idempotent ensures shortly after load and on demand ---
+  function initEnhancements() {
+    try {
+      // DO NOT create floating export buttons.
+      // Instead, bind handlers to existing controls inside modals (if present).
+      bindExportHandlersInModals();
+      ensureExpenseSaveHandler();
+      // re-run to catch late DOM creation, but only attempt binding (no creation).
+      setTimeout(bindExportHandlersInModals, 600);
+      setTimeout(ensureExpenseSaveHandler, 600);
+      setTimeout(bindExportHandlersInModals, 2000);
+      setTimeout(ensureExpenseSaveHandler, 2000);
+      safeLog('Enhancements for export & save initialized (non-creating mode)');
+    } catch(e){ console.warn('initEnhancements error', e); }
+  }
+
+  // run on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initEnhancements);
+  } else {
+    initEnhancements();
+  }
+
+  // expose manual init for testing
+  try { window._ensureExportAndExpenseEnhancements = initEnhancements; } catch(e){}
+})(window, document);
+</script>

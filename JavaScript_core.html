@@ -1,0 +1,201 @@
+<script nonce="SSR2ii5fRwtNJngHlEUxow">
+'use strict';
+
+(function(window, document){
+  if (window.__budgetCoreInstalled) return;
+  window.__budgetCoreInstalled = true;
+
+  var State = window.State = window.State || {
+    allItems: [],
+    filteredItems: [],
+    budgetAlerts: [],
+    user: null,
+    selectedItem: null
+  };
+
+  function callServer(fnName, args) {
+    args = Array.isArray(args) ? args : [];
+
+    if (typeof window.rpcWithRetry === 'function') {
+      try { return window.rpcWithRetry(fnName, args); } catch (e) {}
+    }
+
+    return new Promise(function(resolve, reject){
+      try {
+        if (!(window.google && google.script && google.script.run)) {
+          reject(new Error('google.script.run not available'));
+          return;
+        }
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)[fnName].apply(null, args);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  function applyFilters() {
+    var inputs = {
+      itemId: (document.getElementById('searchItemId') || {}).value || '',
+      item: (document.getElementById('searchItem') || {}).value || '',
+      work: (document.getElementById('searchWork') || {}).value || '',
+      department: (document.getElementById('searchDepartment') || {}).value || ''
+    };
+    var statusFilter = (document.getElementById('budgetStatusFilter') || {}).value || 'all';
+    var sortFilter = (document.getElementById('sortFilter') || {}).value || 'default';
+
+    var filtered = (State.allItems || []).filter(function(item){
+      var itemId = String(item.itemId || '').toLowerCase();
+      var itemText = String(item.item || '').toLowerCase();
+      var workText = String(item.work || '').toLowerCase();
+      var deptText = String(item.department || '').toLowerCase();
+      var percent = item.budget ? ((Number(item.used || 0) / Number(item.budget || 1)) * 100) : 0;
+      var remaining = Number(item.remaining || 0);
+
+      if (inputs.itemId && itemId.indexOf(inputs.itemId.trim().toLowerCase()) === -1) return false;
+      if (inputs.item && itemText.indexOf(inputs.item.trim().toLowerCase()) === -1) return false;
+      if (inputs.work && workText.indexOf(inputs.work.trim().toLowerCase()) === -1) return false;
+      if (inputs.department && deptText.indexOf(inputs.department.trim().toLowerCase()) === -1) return false;
+
+      if (statusFilter === 'available' && percent >= 80) return false;
+      if (statusFilter === 'warning' && (percent < 80 || percent >= 90)) return false;
+      if (statusFilter === 'critical' && (percent < 90 || remaining <= 0)) return false;
+      if (statusFilter === 'depleted' && remaining > 0) return false;
+
+      return true;
+    });
+
+    filtered.sort(function(a, b){
+      if (sortFilter === 'percent-desc') {
+        var pctA = a.budget ? (Number(a.used || 0) / Number(a.budget || 1)) : 0;
+        var pctB = b.budget ? (Number(b.used || 0) / Number(b.budget || 1)) : 0;
+        return pctB - pctA;
+      }
+
+      var keyMap = {
+        'budget-desc': ['budget', -1],
+        'budget-asc': ['budget', 1],
+        'used-desc': ['used', -1],
+        'used-asc': ['used', 1],
+        'remaining-desc': ['remaining', -1],
+        'remaining-asc': ['remaining', 1]
+      };
+      if (!keyMap[sortFilter]) return 0;
+      var cfg = keyMap[sortFilter];
+      return (Number(a[cfg[0]] || 0) - Number(b[cfg[0]] || 0)) * cfg[1];
+    });
+
+    State.filteredItems = filtered;
+    if (typeof window.renderCards === 'function') window.renderCards(filtered);
+  }
+
+  function loadData() {
+    if (typeof window.setBudgetLoading === 'function') window.setBudgetLoading(true);
+    if (typeof window.setBudgetError === 'function') window.setBudgetError('');
+
+    return callServer('getInitialData', [])
+      .then(function(res){
+        if (typeof window.displayData === 'function') window.displayData(res || {});
+        return res;
+      })
+      .catch(function(err){
+        if (typeof window.setBudgetLoading === 'function') window.setBudgetLoading(false);
+        if (typeof window.setBudgetError === 'function') {
+          window.setBudgetError(err && err.message ? err.message : String(err || 'โหลดข้อมูลไม่สำเร็จ'));
+        }
+        throw err;
+      });
+  }
+
+  function bindFormAndFilters() {
+    const descriptionInput = document.getElementById('expenseDescription');
+    const charCountEl = document.getElementById('expenseDescCharCount');
+
+    if (descriptionInput && charCountEl && !descriptionInput.__budgetBound) {
+      descriptionInput.__budgetBound = true;
+      descriptionInput.addEventListener('input', function() {
+        const count = this.value.length;
+        const total = this.maxLength;
+        window.setElementText(charCountEl, `${count} / ${total} ตัวอักษร`);
+      });
+    }
+
+    const expenseForm = document.getElementById('expenseForm');
+    if (expenseForm && !expenseForm.__budgetBound) {
+      expenseForm.__budgetBound = true;
+      expenseForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const formData = {
+          date: (document.getElementById('expenseDate')?.value || '').trim(),
+          amount: (document.getElementById('expenseAmount')?.value || '').trim(),
+          description: (document.getElementById('expenseDescription')?.value || '').trim()
+        };
+
+        const validation = window.validateExpenseForm(formData);
+        if (!validation.valid) {
+          const errorMap = {};
+          validation.errors.forEach(function(err) {
+            if (err.includes('วัน')) errorMap.expenseDate = err;
+            else if (err.includes('จำนวนเงิน')) errorMap.expenseAmount = err;
+            else if (err.includes('รายละเอียด')) errorMap.expenseDesc = err;
+          });
+          window.displayFormErrors(errorMap);
+          return;
+        }
+
+        window.displayFormErrors({});
+
+        if (typeof window.recordExpense === 'function') {
+          window.recordExpense(State.selectedItem && State.selectedItem.itemId, formData.amount, formData.description, formData.date);
+        } else {
+          console.warn('recordExpense function not found');
+        }
+      });
+    }
+
+    ['searchItemId', 'searchItem', 'searchWork', 'searchDepartment'].forEach(function(inputId) {
+      const input = document.getElementById(inputId);
+      if (!input || input.__budgetBound) return;
+      input.__budgetBound = true;
+      const debouncedFilter = window.debounce(applyFilters, 300);
+      input.addEventListener('keyup', debouncedFilter);
+      input.addEventListener('change', debouncedFilter);
+    });
+
+    ['budgetStatusFilter', 'sortFilter'].forEach(function(selectId) {
+      const select = document.getElementById(selectId);
+      if (!select || select.__budgetBound) return;
+      select.__budgetBound = true;
+      select.addEventListener('change', applyFilters);
+    });
+
+    const resetBtn = document.querySelector('[data-action="reset-filters"]');
+    if (resetBtn && !resetBtn.__budgetBound) {
+      resetBtn.__budgetBound = true;
+      resetBtn.addEventListener('click', function() {
+        ['searchItemId', 'searchItem', 'searchWork', 'searchDepartment'].forEach(function(id) {
+          const input = document.getElementById(id);
+          if (input) input.value = '';
+        });
+        const statusFilter = document.getElementById('budgetStatusFilter');
+        const sortFilter = document.getElementById('sortFilter');
+        if (statusFilter) statusFilter.value = 'all';
+        if (sortFilter) sortFilter.value = 'default';
+        applyFilters();
+      });
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    bindFormAndFilters();
+    loadData().catch(function(err){
+      console.warn('Initial load failed', err);
+    });
+  });
+
+  window.applyFilters = window.applyFilters || applyFilters;
+  window.loadData = window.loadData || loadData;
+})(window, document);
+</script>

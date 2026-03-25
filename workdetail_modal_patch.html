@@ -1,0 +1,204 @@
+<script>
+/**
+ * workdetail_modal_patch.js
+ * Ensure workDetail modal exists and wrap showWorkExpenseTypes to open it first.
+ *
+ * Paste this file into your project (include after core/helper and UI files).
+ * Safe to include multiple times (idempotent).
+ */
+
+(function(window, document){
+  'use strict';
+
+  if (window._wd_modal_patch_installed) {
+    console.debug('workdetail_modal_patch: already installed');
+    return;
+  }
+  window._wd_modal_patch_installed = true;
+
+  function ensureWorkDetailModalLocal() {
+    try {
+      var m = document.getElementById('workDetailModal');
+      if (m) return m;
+
+      var div = document.createElement('div');
+      div.id = 'workDetailModal';
+      div.className = 'modal';
+      div.style.display = 'none';
+      div.style.position = 'fixed';
+      div.style.inset = '0';
+      div.style.zIndex = '10050';
+      div.style.alignItems = 'center';
+      div.style.justifyContent = 'center';
+
+      div.innerHTML = '\
+        <div class="modal-content modal-content-large" role="dialog" aria-modal="true" style="max-width:900px;">\
+          <div style="padding:12px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee;">\
+            <strong id="workDetailTitle" style="font-size:16px">📋 รายละเอียด</strong>\
+            <button id="workDetailClose" aria-label="ปิด" style="background:#fff;border:0;padding:6px 10px;cursor:pointer">ปิด</button>\
+          </div>\
+          <div id="workDetailContent" style="padding:16px; max-height:70vh; overflow:auto;">กำลังโหลด...</div>\
+          <div id="workDetailActions" class="modal-actions" style="padding:12px 16px; display:flex; gap:8px; justify-content:flex-end; border-top:1px solid #eee;">\
+            <button type="button" class="print-btn" data-action="print-workdetail" style="padding:6px 12px;">🖨️ พิมพ์</button>\
+            <button type="button" class="btn btn-primary" data-action="export-workdetail" style="padding:6px 12px;">📄 Export PDF</button>\
+            <button type="button" class="btn btn-secondary" data-action="close-modal" data-target="workDetailModal" style="padding:6px 12px;">ปิด</button>\
+          </div>\
+        </div>';
+
+      document.body.appendChild(div);
+
+      var closeBtn = document.getElementById('workDetailClose');
+      if (closeBtn) closeBtn.addEventListener('click', function(){ try{ if (typeof window.closeModal === 'function') window.closeModal('workDetailModal'); else { var el=document.getElementById('workDetailModal'); if(el) el.classList.remove('active'); } }catch(e){} });
+
+      // close when clicking outside content
+      div.addEventListener('click', function(evt){
+        try {
+          var modalContent = div.querySelector('.modal-content');
+          if (modalContent && !modalContent.contains(evt.target)) {
+            try { if (typeof window.closeModal === 'function') window.closeModal('workDetailModal'); else div.classList.remove('active'); } catch(e) {}
+          }
+        } catch(e){}
+      }, false);
+
+      return div;
+    } catch (e) {
+      console.warn('ensureWorkDetailModalLocal failed', e);
+      return null;
+    }
+  }
+
+  function openWorkDetailModal() {
+    try {
+      var modal = document.getElementById('workDetailModal') || ensureWorkDetailModalLocal();
+      if (!modal) return false;
+
+      // prefer modal manager if available
+      try {
+        if (typeof window.openModal === 'function') {
+          try { window.openModal(modal, { zIndex: 10050 }); return true; } catch(e){}
+        }
+      } catch(e){}
+
+      // prefer _forceShowModal if available
+      try {
+        if (typeof window._forceShowModal === 'function') {
+          try { window._forceShowModal(modal, 10050); return true; } catch(e){}
+        }
+      } catch(e){}
+
+      // fallback: set styles/class and ensure backdrop
+      try {
+        modal.style.display = 'flex';
+        modal.style.visibility = 'visible';
+        modal.style.pointerEvents = 'auto';
+        modal.style.opacity = '1';
+        modal.classList.add('active');
+
+        var bd = document.querySelector('.modal-backdrop.app-managed');
+        if (!bd) {
+          bd = document.createElement('div');
+          bd.className = 'modal-backdrop app-managed';
+          Object.assign(bd.style, {
+            position: 'fixed', left: '0', top: '0', width: '100%', height: '100%',
+            background: 'rgba(0,0,0,0.45)', zIndex: String(10049), pointerEvents: 'auto'
+          });
+          document.body.appendChild(bd);
+        } else {
+          bd.style.display = 'block';
+          bd.style.pointerEvents = 'auto';
+          bd.style.zIndex = String(10049);
+        }
+        return true;
+      } catch(e){
+        console.warn('openWorkDetailModal fallback failed', e);
+        return false;
+      }
+    } catch(e){ console.warn('openWorkDetailModal error', e); return false; }
+  }
+
+  // Wrap or install showWorkExpenseTypes to ensure modal exists and opens first
+  try {
+    var origShow = window.showWorkExpenseTypes;
+    var haveOrig = (typeof origShow === 'function');
+
+    function patchedShowWorkExpenseTypes(workName) {
+      try {
+        ensureWorkDetailModalLocal();
+        openWorkDetailModal();
+
+        // set title if present
+        try {
+          var titleEl = document.getElementById('workDetailTitle');
+          if (titleEl) titleEl.textContent = '📋 รายละเอียดงาน: ' + (workName || '');
+        } catch(e){}
+
+        // show loading placeholder in content
+        try {
+          var content = document.getElementById('workDetailContent');
+          if (content) content.innerHTML = '<div style="padding:40px;text-align:center;">⏳ กำลังโหลดข้อมูล...</div>';
+        } catch(e){}
+
+        // If original exists, call it (it will fetch details and render)
+        if (haveOrig) {
+          try { return origShow.apply(this, arguments); } catch(e){ console.error('patchedShowWorkExpenseTypes: original threw', e); }
+        }
+
+        // Fallback: attempt to call google.script.run.getWorkDetails
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+          try {
+            google.script.run
+              .withSuccessHandler(function(res){
+                try {
+                  if (!res || !res.success) {
+                    if (typeof window.showCustomAlert === 'function') window.showCustomAlert('ไม่พบข้อมูล', (res && res.message) ? res.message : 'ไม่พบข้อมูล', 'error');
+                    // close modal if no data
+                    try { if (typeof window.closeModal === 'function') window.closeModal('workDetailModal'); } catch(e){}
+                    return;
+                  }
+                  var filtered = res.detailedData || [];
+                  try { window.State = window.State || {}; window.State.dashboardDetailedData = filtered; }catch(e){}
+                  if (typeof window.renderWorkExpenseTypes === 'function') {
+                    try { window.renderWorkExpenseTypes(workName, filtered); } catch(e){ console.error('renderWorkExpenseTypes error', e); }
+                  } else {
+                    // fallback simple render
+                    var content = document.getElementById('workDetailContent');
+                    if (content) content.innerHTML = '<div style="padding:20px;color:#666;">ไม่พบฟังก์ชัน renderWorkExpenseTypes</div>';
+                  }
+                } catch(e){ console.error('getWorkDetails successHandler error', e); }
+              })
+              .withFailureHandler(function(err){
+                try { if (typeof window.showCustomAlert === 'function') window.showCustomAlert('❌ เกิดข้อผิดพลาด', String(err), 'error'); } catch(e){}
+                try { if (typeof window.closeModal === 'function') window.closeModal('workDetailModal'); } catch(e){}
+              })
+              .getWorkDetails(workName);
+            return;
+          } catch(e){ console.warn('patchedShowWorkExpenseTypes google.script.run failed', e); }
+        }
+
+        // If we couldn't fetch, show a message
+        try {
+          var content = document.getElementById('workDetailContent');
+          if (content) content.innerHTML = '<div style="padding:20px;color:#666;">ไม่สามารถโหลดรายละเอียดได้ในขณะนี้</div>';
+        } catch(e){}
+      } catch(err) { console.error('patchedShowWorkExpenseTypes unexpected error', err); }
+    }
+
+    // Don't overwrite original if identical; otherwise set patched wrapper
+    try {
+      if (!haveOrig) {
+        window.showWorkExpenseTypes = patchedShowWorkExpenseTypes;
+        console.debug('workdetail_modal_patch: installed showWorkExpenseTypes fallback');
+      } else {
+        // if original exists, wrap it but keep reference to original
+        if (!window._wd_original_showWorkExpenseTypes) window._wd_original_showWorkExpenseTypes = origShow;
+        window.showWorkExpenseTypes = function(){
+          return patchedShowWorkExpenseTypes.apply(this, arguments);
+        };
+        console.debug('workdetail_modal_patch: wrapped existing showWorkExpenseTypes');
+      }
+    } catch(e){ console.warn('workdetail_modal_patch: failed to install wrapper', e); }
+
+  } catch(e){ console.error('workdetail_modal_patch init failed', e); }
+
+})(window, document);
+</script>

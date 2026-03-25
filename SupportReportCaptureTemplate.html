@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>รายงาน: งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
+
+  @page { size: A4 landscape; margin: 28pt 32pt; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Sarabun', 'Noto Sans Thai', Arial, sans-serif;
+    font-size: 11px;
+    color: #1a1a1a;
+    margin: 0;
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page { padding: 18px 24px; max-width: 100%; }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #667eea;
+  }
+  .title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #2d3a8c;
+    margin: 0 0 4px 0;
+    line-height: 1.4;
+  }
+  .meta { font-size: 10px; color: #666; line-height: 1.6; }
+
+  /* ── Table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    table-layout: fixed;
+  }
+
+  /* column widths: รายการ ยาว, เดือน แคบ, คงเหลือ กลาง */
+  col.col-name     { width: 22%; }
+  col.col-month    { width: 5.5%; }
+  col.col-remain   { width: 7%; }
+
+  th, td {
+    border: 1px solid #d8dce8;
+    padding: 5px 6px;
+    vertical-align: middle;
+    word-break: break-word;
+    line-height: 1.45;
+  }
+
+  /* header row */
+  thead tr th {
+    background: #667eea;
+    color: #fff;
+    font-weight: 700;
+    text-align: center;
+    font-size: 10px;
+    white-space: nowrap;
+    padding: 6px 4px;
+  }
+  thead tr th:first-child { text-align: left; padding-left: 8px; }
+
+  /* body rows */
+  tbody tr:nth-child(even) td { background: #f7f8fd; }
+  tbody tr:hover td { background: #eef0fb; }
+
+  td:first-child {
+    text-align: left;
+    padding-left: 8px;
+    color: #222;
+    font-size: 10.5px;
+  }
+
+  /* ตัวเลข */
+  .right {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    padding-right: 8px;
+    color: #1a1a1a;
+  }
+
+  /* ค่าว่าง (-) หรี่สี */
+  .right.zero { color: #bbb; }
+
+  /* footer */
+  tfoot td {
+    font-weight: 700;
+    background: #eef0fb;
+    border-top: 2px solid #667eea;
+    color: #2d3a8c;
+  }
+  tfoot td.right { color: #2d3a8c; }
+
+  /* ── Summary ── */
+  .summary {
+    margin-top: 10px;
+    font-size: 10.5px;
+    color: #444;
+    line-height: 1.8;
+    padding-top: 6px;
+    border-top: 1px solid #e0e0e0;
+  }
+  .summary span { font-weight: 700; color: #2d3a8c; }
+
+  .muted { color: #888; font-size: 10px; }
+
+  @media print {
+    body { font-size: 10px; }
+    .page { padding: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="title">รายงาน: งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</div>
+        <div class="meta">ปี <?= (params && params.year) || (report && report.year) || '' ?></div>
+      </div>
+      <div style="text-align:right;">
+        <div class="meta">สร้างวันที่: <?= (generatedAt ? Utilities.formatDate(generatedAt, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm") : '') ?></div>
+        <? if (generatedBy) { ?><div class="meta">โดย: <?= generatedBy ?></div><? } ?>
+      </div>
+    </div>
+
+    <? 
+      var monthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      var fiscal = (params && Number(params.fiscalStartMonth)) ? Number(params.fiscalStartMonth) : (report && report.fiscalStartMonth) ? Number(report.fiscalStartMonth) : 10;
+      var headerMonths = [];
+      for (var i=0;i<12;i++){
+        var calM = ((fiscal -1 + i) % 12);
+        headerMonths.push( { idx: calM+1, name: monthNames[calM] } );
+      }
+      var items = report.items || [];
+
+      // compute totals per month and total remaining/budget
+      var totals = Array.apply(null, Array(12)).map(Number.prototype.valueOf,0);
+      var totalRemaining = 0;
+      var totalBudget = 0;
+      for (var ii=0; ii<items.length; ii++){
+        var it = items[ii] || {};
+        var months = Array.isArray(it.months) ? it.months : Array.apply(null, Array(12)).map(Number.prototype.valueOf,0);
+        for (var m=0;m<12;m++){
+          totals[m] = totals[m] + (Number(months[m]||0) || 0);
+        }
+        totalRemaining += Number(it.remaining || 0) || 0;
+        totalBudget += Number(it.budget || 0) || 0;
+      }
+    ?>
+
+    <? if (!items || items.length === 0) { ?>
+      <div class="muted">ไม่มีข้อมูล</div>
+    <? } else { ?>
+      <table>
+          <colgroup>
+          <col class="col-name">
+          <? for(var ci=0;ci<12;ci++){ ?><col class="col-month"><? } ?>
+         <col class="col-remain">
+         </colgroup>
+        <thead>
+          <tr>
+            <th>รายการ</th>
+            <? headerMonths.forEach(function(h){ ?><th class="right"><?= h.name ?></th><? }); ?>
+            <th class="right">คงเหลือ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <? items.forEach(function(it){
+               var months = Array.isArray(it.months) ? it.months : Array.apply(null, Array(12)).map(Number.prototype.valueOf,0);
+               months = months.concat(Array.apply(null, Array(12 - months.length)).map(Number.prototype.valueOf,0)).slice(0,12);
+               var remainVal = Number(it.remaining || 0) || 0;
+          ?>
+            <tr>
+              <td><?= (it.itemName || it.itemId || '') ?></td>
+              <? for (var mi=0; mi<12; mi++){ 
+                   var val = Number(months[mi] || 0) || 0;
+              ?>
+                <td class="right<?= (val===0)?' zero':'' ?>"><?=
+                 (val === 0) ? '-' : val.toLocaleString('th-TH', {minimumFractionDigits:2})
+              ?></td>
+              <? } ?>
+              <td class="right"><?=
+                (remainVal === 0) ? '-' : remainVal.toLocaleString('th-TH', {minimumFractionDigits:2})
+              ?></td>
+            </tr>
+          <? }); ?>
+        </tbody>
+
+        <tfoot>
+          <tr>
+            <td>รวมทั้งสิ้น</td>
+            <? for (var ti=0; ti<12; ti++){ 
+                 var tval = Number(totals[ti] || 0) || 0;
+            ?>
+              <td class="right"><?= (tval === 0) ? '-' : tval.toLocaleString('th-TH', {minimumFractionDigits:2}) ?></td>
+            <? } ?>
+            <td class="right"><?= (totalRemaining === 0) ? '-' : totalRemaining.toLocaleString('th-TH', {minimumFractionDigits:2}) ?></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="summary">
+        <div>สรุป: จำนวนรายการทั้งหมด <?= items.length ?> รายการ</div>
+        <div>รวมงบประมาณ: <?= (totalBudget === 0) ? '-' : totalBudget.toLocaleString('th-TH', {minimumFractionDigits:2}) ?> — รวมคงเหลือ: <?= (totalRemaining === 0) ? '-' : totalRemaining.toLocaleString('th-TH', {minimumFractionDigits:2}) ?></div>
+      </div>
+    <? } ?>
+
+  </div>
+</body>
+</html>
