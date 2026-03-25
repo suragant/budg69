@@ -1,3 +1,4 @@
+
 # budg69
 
 Google Apps Script web app for budget management and support-budget reporting.
@@ -88,3 +89,4 @@ Still worth improving:
 - Review whether `JavaScript_auto_restore_core.html` is still needed
 - Replace work-detail patches with a cleaner first-class module
 - Remove or simplify remaining patch-oriented HTML includes
+
