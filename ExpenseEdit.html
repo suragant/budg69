@@ -12,6 +12,20 @@
 .tx-badge-active    { background: #e8f5e9; color: #2e7d32; }
 .tx-badge-edited    { background: #fff8e1; color: #f57f17; }
 .tx-badge-cancelled { background: #fce4ec; color: #c62828; }
+.tx-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.tx-kind-normal   { background: #eef2ff; color: #4f46e5; }
+.tx-kind-transfer { background: #e0f2fe; color: #0369a1; }
+.tx-kind-edit     { background: #fff7ed; color: #c2410c; }
+.tx-kind-cancel   { background: #fee2e2; color: #b91c1c; }
  
 /* ── edit/cancel buttons ──────────────────────────────────── */
 .tx-actions {
@@ -35,6 +49,218 @@
 .tx-btn-cancel:hover { opacity: 0.8; }
 .tx-btn-edit:disabled,
 .tx-btn-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── history modal list ───────────────────────────────────── */
+#historyModal .modal-content {
+  max-width: 700px;
+  width: min(700px, calc(100vw - 32px));
+  padding: 0;
+  overflow: hidden;
+}
+#historyModal .modal-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #eceff5;
+}
+#historyDetails {
+  color: #64748b !important;
+  font-size: 13px !important;
+  margin-top: 6px !important;
+  line-height: 1.45;
+}
+#historyLoading {
+  padding: 28px 20px !important;
+  color: #64748b;
+}
+#historyContainer {
+  max-height: 62vh !important;
+  overflow-y: auto !important;
+  padding: 14px 14px 6px;
+  background: linear-gradient(180deg, #f8faff 0%, #f4f6fb 100%);
+}
+#historyModal .modal-actions {
+  padding: 14px 20px 18px;
+  border-top: 1px solid #eceff5;
+  background: #fff;
+}
+.tx-empty {
+  padding: 26px 20px;
+  text-align: center;
+  color: #64748b;
+  background: #fff;
+  border: 1px dashed #d7deee;
+  border-radius: 14px;
+}
+.tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tx-card {
+  background: #fff;
+  border: 1px solid #e6ebf5;
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.08);
+}
+.tx-card.is-cancelled {
+  opacity: 0.76;
+  background: #fcfcfd;
+}
+.tx-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.tx-head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.tx-amount-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.tx-amount {
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.02em;
+}
+.tx-amount-unit {
+  font-size: 14px;
+  font-weight: 700;
+  color: #475569;
+  margin-left: 4px;
+}
+.tx-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 12px;
+  color: #64748b;
+}
+.tx-meta strong {
+  color: #334155;
+  font-weight: 700;
+}
+.tx-desc {
+  margin: 10px 0 0;
+  padding: 11px 12px;
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 12px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.tx-desc.is-empty {
+  color: #94a3b8;
+  font-style: italic;
+}
+.tx-desc.is-transfer {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.tx-desc.is-edit {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #c2410c;
+}
+.tx-desc.is-cancel {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.tx-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.tx-summary-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e8eef8;
+}
+.tx-summary-label {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+.tx-summary-value {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.tx-summary-value.is-balance {
+  color: #2563eb;
+}
+.tx-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eef2f8;
+}
+.tx-note {
+  min-width: 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+}
+.tx-note strong {
+  color: #475569;
+}
+.tx-actions {
+  gap: 8px;
+  margin-top: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.tx-btn-edit, .tx-btn-cancel {
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  #historyModal .modal-content {
+    width: calc(100vw - 20px);
+  }
+  #historyContainer {
+    padding: 12px 12px 4px;
+  }
+  .tx-card-head,
+  .tx-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tx-amount {
+    font-size: 24px;
+  }
+  .tx-summary {
+    grid-template-columns: 1fr;
+  }
+  .tx-actions {
+    width: 100%;
+  }
+  .tx-btn-edit, .tx-btn-cancel {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+}
  
 /* ── Edit modal ───────────────────────────────────────────── */
 #editExpenseModal {
@@ -216,12 +442,51 @@
   function fmtB(n) {
     return Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+  function getHistoryKind(h) {
+    var type = String((h && h.type) || '').toUpperCase();
+    var desc = String((h && h.description) || '').toUpperCase();
+    var status = String((h && h.status) || '').toUpperCase();
+    if (type.indexOf('TRANSFER') !== -1 || desc.indexOf('[TRANSFER]') !== -1) {
+      return { key: 'transfer', label: 'โอนงบ', className: 'tx-kind-transfer' };
+    }
+    if (status === 'CANCELLED' || type === 'CANCEL' || desc.indexOf('[CANCEL]') !== -1) {
+      return { key: 'cancel', label: 'ยกเลิกรายการ', className: 'tx-kind-cancel' };
+    }
+    if (status === 'EDITED' || type === 'EDIT' || desc.indexOf('[EDIT]') !== -1) {
+      return { key: 'edit', label: 'แก้ไขรายการ', className: 'tx-kind-edit' };
+    }
+    return { key: 'normal', label: 'เบิกจ่าย', className: 'tx-kind-normal' };
+  }
   function $(id) { return document.getElementById(id); }
   function setLoading(btnId, on, label) {
     var btn = $(btnId);
     if (!btn) return;
     btn.disabled = on;
     btn.textContent = on ? '⏳ กำลังดำเนินการ...' : label;
+  }
+  function callExpenseRpc(fnName, args) {
+    args = Array.isArray(args) ? args : [];
+    if (typeof window.rpcWithRetry === 'function') {
+      return window.rpcWithRetry(fnName, args);
+    }
+    return new Promise(function(resolve, reject) {
+      try {
+        if (!(window.google && google.script && google.script.run)) {
+          reject(new Error('google.script.run not available'));
+          return;
+        }
+        var runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject);
+        if (!runner || typeof runner[fnName] !== 'function') {
+          reject(new Error('RPC method not found: ' + fnName));
+          return;
+        }
+        runner[fnName].apply(runner, args);
+      } catch (e) {
+        reject(e);
+      }
+    });
   }
  
   /* ── override showHistory เพื่อเพิ่มปุ่ม ─────────────────── */
@@ -235,11 +500,11 @@
     var container = document.getElementById('historyContainer');
     if (!container) return;
     if (!history || history.length === 0) {
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;">ยังไม่มีประวัติ</div>';
+      container.innerHTML = '<div class="tx-empty">ยังไม่มีประวัติการทำรายการ</div>';
       return;
     }
  
-    container.innerHTML = history.map(function (h) {
+    container.innerHTML = '<div class="tx-list">' + history.map(function (h) {
       var ts  = new Date(h.timestamp).toLocaleString('th-TH');
       var ed  = h.expenseDate
         ? new Date(h.expenseDate + 'T00:00:00').toLocaleDateString('th-TH')
@@ -248,6 +513,7 @@
       var status    = h.status || 'ACTIVE';
       var isCancelled = status === 'CANCELLED';
       var isEdited    = status === 'EDITED';
+      var kind = getHistoryKind(h);
  
       var badgeClass = isCancelled ? 'tx-badge-cancelled' : isEdited ? 'tx-badge-edited' : 'tx-badge-active';
       var badgeText  = isCancelled ? 'ยกเลิกแล้ว' : isEdited ? 'แก้ไขแล้ว' : 'ใช้งาน';
@@ -256,38 +522,60 @@
       var amtStyle    = isCancelled
         ? 'text-decoration:line-through;color:#aaa;'
         : 'font-weight:bold;color:#FF9800;';
+      var description = escapeHtml(h.description || '');
+      var detailText = description || 'ไม่มีรายละเอียดเพิ่มเติม';
+      var detailClass = description ? 'tx-desc' : 'tx-desc is-empty';
+      if (kind.key === 'transfer') detailClass += ' is-transfer';
+      else if (kind.key === 'edit') detailClass += ' is-edit';
+      else if (kind.key === 'cancel') detailClass += ' is-cancel';
  
       // ปุ่ม action — แสดงเฉพาะรายการ ACTIVE
       var actionsHtml = '';
-      if (!isCancelled && h.logRowIndex) {
+      if (!isCancelled && kind.key !== 'transfer' && h.logRowIndex) {
         actionsHtml = '<div class="tx-actions">' +
-          '<button class="tx-btn-edit"   data-logrow="' + h.logRowIndex + '" ' +
+          '<button type="button" class="tx-btn-edit"   data-logrow="' + h.logRowIndex + '" ' +
             'data-amount="' + h.amount + '" ' +
             'data-date="' + (h.expenseDate || '') + '" ' +
             'data-desc="' + escapeHtml(h.description || '') + '">✏️ แก้ไข</button>' +
-          '<button class="tx-btn-cancel" data-logrow="' + h.logRowIndex + '" ' +
+          '<button type="button" class="tx-btn-cancel" data-logrow="' + h.logRowIndex + '" ' +
             'data-amount="' + h.amount + '">🗑️ ยกเลิก</button>' +
           '</div>';
       }
  
-      return '<div style="padding:15px;background:#f8f9fa;border-radius:8px;margin-bottom:10px;' +
-               'border-left:4px solid ' + borderColor + ';' +
-               (isCancelled ? 'opacity:0.7;' : '') + '">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-          '<div style="font-size:12px;color:#666;">🕒 บันทึกเมื่อ: ' + escapeHtml(ts) + '</div>' +
-          '<span class="tx-badge ' + badgeClass + '">' + badgeText + '</span>' +
+      return '<section class="tx-card' + (isCancelled ? ' is-cancelled' : '') + '" style="border-left:4px solid ' + borderColor + ';">' +
+        '<div class="tx-card-head">' +
+          '<div class="tx-amount-block">' +
+            '<div class="tx-amount" style="' + amtStyle + '">' + fmtB(h.amount) + '<span class="tx-amount-unit">บาท</span></div>' +
+            '<div class="tx-meta">' +
+              '<span><strong>วันที่เบิก</strong> ' + escapeHtml(ed) + '</span>' +
+              '<span><strong>บันทึกเมื่อ</strong> ' + escapeHtml(ts) + '</span>' +
+              '<span><strong>ผู้บันทึก</strong> ' + escapeHtml(h.user || '-') + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="tx-head-right">' +
+            '<span class="tx-kind-badge ' + kind.className + '">' + kind.label + '</span>' +
+            '<span class="tx-badge ' + badgeClass + '">' + badgeText + '</span>' +
+          '</div>' +
         '</div>' +
-        '<div style="font-size:12px;color:#666;">📅 วันที่เบิก: ' + escapeHtml(ed) + '</div>' +
-        '<div style="font-size:12px;color:#666;">👤 ผู้บันทึก: ' + escapeHtml(h.user) + '</div>' +
-        '<div style="' + amtStyle + 'margin:8px 0;">💵 จำนวนเงิน: ' + fmtB(h.amount) + ' บาท</div>' +
-        (h.description ? '<div style="margin:8px 0;font-size:13px;">📝 ' + escapeHtml(h.description) + '</div>' : '') +
-        (h.editedBy ? '<div style="font-size:11px;color:#999;">แก้ไขโดย: ' + escapeHtml(h.editedBy) + '</div>' : '') +
-        '<div style="font-size:12px;color:#666;margin-top:8px;padding-top:8px;border-top:1px solid #ddd;">' +
-          'ยอดรวมหลังทำรายการ: ' + fmtB(h.newUsed) + ' ฿ | คงเหลือหลังทำรายการ: ' + fmtB(h.newRemaining) + ' ฿' +
+        '<div class="' + detailClass + '">' + detailText + '</div>' +
+        '<div class="tx-summary">' +
+          '<div class="tx-summary-card">' +
+            '<span class="tx-summary-label">ยอดใช้ไปหลังรายการ</span>' +
+            '<span class="tx-summary-value">' + fmtB(h.newUsed) + ' บาท</span>' +
+          '</div>' +
+          '<div class="tx-summary-card">' +
+            '<span class="tx-summary-label">คงเหลือหลังรายการ</span>' +
+            '<span class="tx-summary-value is-balance">' + fmtB(h.newRemaining) + ' บาท</span>' +
+          '</div>' +
         '</div>' +
-        actionsHtml +
-      '</div>';
-    }).join('');
+        '<div class="tx-footer">' +
+          '<div class="tx-note">' +
+            (h.editedBy ? '<strong>แก้ไขล่าสุดโดย:</strong> ' + escapeHtml(h.editedBy) : '<strong>สถานะ:</strong> พร้อมใช้งาน') +
+          '</div>' +
+          actionsHtml +
+        '</div>' +
+      '</section>';
+    }).join('') + '</div>';
  
     // delegate click สำหรับปุ่มใน history
     container.onclick = function (e) {
@@ -297,22 +585,41 @@
       if (cancelBtn) openCancelModal(cancelBtn);
     };
   };
+
+  if (!window.__expenseHistoryDelegated) {
+    document.addEventListener('click', function (e) {
+      var editBtn = e.target && e.target.closest ? e.target.closest('.tx-btn-edit') : null;
+      var cancelBtn = e.target && e.target.closest ? e.target.closest('.tx-btn-cancel') : null;
+      if (editBtn) {
+        e.preventDefault();
+        openEditModal(editBtn);
+      }
+      if (cancelBtn) {
+        e.preventDefault();
+        openCancelModal(cancelBtn);
+      }
+    });
+    window.__expenseHistoryDelegated = true;
+  }
  
   /* ── Edit Modal ───────────────────────────────────────────── */
   function openEditModal(btn) {
     _editLogRow = Number(btn.getAttribute('data-logrow'));
+    if (!_editLogRow) return;
     $('editAmount').value      = btn.getAttribute('data-amount') || '';
     $('editDate').value        = btn.getAttribute('data-date')   || '';
     $('editDescription').value = btn.getAttribute('data-desc')   || '';
     $('editExpenseInfo').textContent = 'แก้ไขรายการ #' + _editLogRow;
     $('editExpenseSave').textContent = '💾 บันทึก';
     $('editExpenseSave').disabled    = false;
-    $('editExpenseModal').classList.add('active');
+    if (typeof window.openModal === 'function') window.openModal('editExpenseModal', { keepOthers: true, zIndex: 20000 });
+    else $('editExpenseModal').classList.add('active');
     $('editAmount').focus();
   }
  
   function closeEditModal() {
-    $('editExpenseModal').classList.remove('active');
+    if (typeof window.closeModal === 'function') window.closeModal('editExpenseModal');
+    else $('editExpenseModal').classList.remove('active');
     _editLogRow = null;
   }
  
@@ -334,8 +641,8 @@
  
     setLoading('editExpenseSave', true, '💾 บันทึก');
  
-    google.script.run
-      .withSuccessHandler(function (res) {
+    callExpenseRpc('editExpense', [_editLogRow, amt, desc, date])
+      .then(function (res) {
         setLoading('editExpenseSave', false, '💾 บันทึก');
         if (res && res.success) {
           closeEditModal();
@@ -345,16 +652,16 @@
           if (typeof showCustomAlert === 'function') showCustomAlert('❌ ผิดพลาด', (res && res.message) || 'เกิดข้อผิดพลาด', 'error');
         }
       })
-      .withFailureHandler(function (err) {
+      .catch(function (err) {
         setLoading('editExpenseSave', false, '💾 บันทึก');
         if (typeof showCustomAlert === 'function') showCustomAlert('❌ ผิดพลาด', String(err), 'error');
-      })
-      .editExpense(_editLogRow, amt, desc, date);
+      });
   });
  
   /* ── Cancel Modal ─────────────────────────────────────────── */
   function openCancelModal(btn) {
     _cancelLogRow = Number(btn.getAttribute('data-logrow'));
+    if (!_cancelLogRow) return;
     var amt = Number(btn.getAttribute('data-amount') || 0);
     $('cancelExpenseInfo').textContent =
       'รายการ #' + _cancelLogRow + ' จำนวน ' + fmtB(amt) + ' บาท จะถูกยกเลิก ' +
@@ -362,12 +669,14 @@
     $('cancelReason').value = '';
     $('cancelExpenseConfirm').textContent = '🗑️ ยืนยันยกเลิก';
     $('cancelExpenseConfirm').disabled    = false;
-    $('cancelExpenseModal').classList.add('active');
+    if (typeof window.openModal === 'function') window.openModal('cancelExpenseModal', { keepOthers: true, zIndex: 20000 });
+    else $('cancelExpenseModal').classList.add('active');
     $('cancelReason').focus();
   }
  
   function closeCancelModal() {
-    $('cancelExpenseModal').classList.remove('active');
+    if (typeof window.closeModal === 'function') window.closeModal('cancelExpenseModal');
+    else $('cancelExpenseModal').classList.remove('active');
     _cancelLogRow = null;
   }
  
@@ -386,8 +695,8 @@
  
     setLoading('cancelExpenseConfirm', true, '🗑️ ยืนยันยกเลิก');
  
-    google.script.run
-      .withSuccessHandler(function (res) {
+    callExpenseRpc('cancelExpense', [_cancelLogRow, reason])
+      .then(function (res) {
         setLoading('cancelExpenseConfirm', false, '🗑️ ยืนยันยกเลิก');
         if (res && res.success) {
           closeCancelModal();
@@ -397,11 +706,10 @@
           if (typeof showCustomAlert === 'function') showCustomAlert('❌ ผิดพลาด', (res && res.message) || 'เกิดข้อผิดพลาด', 'error');
         }
       })
-      .withFailureHandler(function (err) {
+      .catch(function (err) {
         setLoading('cancelExpenseConfirm', false, '🗑️ ยืนยันยกเลิก');
         if (typeof showCustomAlert === 'function') showCustomAlert('❌ ผิดพลาด', String(err), 'error');
-      })
-      .cancelExpense(_cancelLogRow, reason);
+      });
   });
  
   /* ── reload หลัง edit/cancel ──────────────────────────────── */

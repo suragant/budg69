@@ -1,14 +1,14 @@
 <script>
 /*
-  support_modal_manager3.js (patched)
-  - Original behavior preserved.
+  support_client.js
+  - Support page client logic.
   - Patch (integrated): ensure "ประวัติ" / open-history buttons are reliably handled.
     * Accepts data-action "open-history" plus variants.
     * Attaches pointerdown+click handlers directly to buttons and uses a MutationObserver
       to re-attach after re-renders.
     * Uses existing clientNormalizeItemId / openHistoryModal / __support_on_btn if present.
     * Idempotent: won't attach multiple times on repeated loads.
-  - Replace existing support_modal_manager3.js with this file.
+  - Safe to include repeatedly.
 */
 (function(){
   var LONG_NAME = 'งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ';
@@ -115,7 +115,9 @@
           return new Promise(function(resolve, reject){
             try {
               if (!window.google || !google.script || !google.script.run) return reject(new Error('google.script.run not available'));
-              google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fnName].apply(null, args || []);
+              var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+              if (!runner || typeof runner[fnName] !== 'function') return reject(new Error('RPC method not found: ' + fnName));
+              runner[fnName].apply(runner, args || []);
             } catch(err){ reject(err); }
           });
         });
@@ -124,7 +126,9 @@
     return new Promise(function(resolve, reject){
       try {
         if (!(window.google && google.script && google.script.run)) return reject(new Error('No RPC available'));
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fnName].apply(null, args || []);
+        var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+        if (!runner || typeof runner[fnName] !== 'function') return reject(new Error('RPC method not found: ' + fnName));
+        runner[fnName].apply(runner, args || []);
       } catch (err) { reject(err); }
     });
   }
@@ -420,12 +424,12 @@
   (function installIntegratedHistoryPatch() {
     try {
       if (typeof window === 'undefined') return;
-      if (window.__support_history_patch_installed_in_modal_manager) {
+      if (window.__support_history_handlers_installed) {
         // already installed
         return;
       }
-      window.__support_history_patch_installed_in_modal_manager = true;
-      console.debug('[support_modal_manager3] history patch initializing');
+      window.__support_history_handlers_installed = true;
+      console.debug('[support_client] history handlers initializing');
 
       function _norm(id){
         try { return (typeof window.clientNormalizeItemId === 'function') ? window.clientNormalizeItemId(id) : (id===null||id===undefined ? '' : String(id).replace(/\u00A0/g,' ').replace(/[\s\-_]+/g,' ').trim()); } catch(e){ return String(id||''); }
@@ -443,7 +447,7 @@
               if (anc) id = anc.getAttribute('data-item-id') || '';
             }
             var norm = _norm(id || '');
-            console.debug('[support_modal_manager3] history click captured', { raw:id, norm:norm, btn: btn });
+            console.debug('[support_client] history click captured', { raw:id, norm:norm, btn: btn });
             if (typeof openHistoryModal === 'function') {
               try { openHistoryModal(norm); return; } catch(err){ console.warn('openHistoryModal threw', err); }
             }
@@ -453,9 +457,9 @@
             if (typeof window.__support_on_btn === 'function') {
               try { window.__support_on_btn(norm, 'history'); return; } catch(err){ console.warn('__support_on_btn threw', err); }
             }
-            console.warn('[support_modal_manager3] no history handler available for', norm);
+            console.warn('[support_client] no history handler available for', norm);
           } catch(e) {
-            console.error('[support_modal_manager3] history handler error', e);
+            console.error('[support_client] history handler error', e);
           }
         };
       }
@@ -485,11 +489,11 @@
                 try { btn.addEventListener('pointerdown', h, {capture:true, passive:false}); } catch(e){ try { btn.addEventListener('pointerdown', h, true); } catch(_){} }
                 try { btn.addEventListener('click', h, false); } catch(e){ try { btn.addEventListener('click', h, true); } catch(_){} }
                 btn.__support_history_listener_attached = true;
-                console.debug('[support_modal_manager3] attached history listener to', btn, 'data-action=', da);
+                console.debug('[support_client] attached history listener to', btn, 'data-action=', da);
               }
             } catch(e){ /* ignore per-button errors */ }
           });
-        } catch(e){ console.warn('[support_modal_manager3] attachHistoryListeners error', e); }
+        } catch(e){ console.warn('[support_client] attachHistoryListeners error', e); }
       }
 
       function observeHistoryContainer(){
@@ -506,14 +510,14 @@
             return;
           }
           var obs = new MutationObserver(function(mutations){
-            try { attachHistoryListeners(root); } catch(e){ console.warn('[support_modal_manager3] observer callback error', e); }
+            try { attachHistoryListeners(root); } catch(e){ console.warn('[support_client] observer callback error', e); }
           });
           obs.observe(root, { childList: true, subtree: true });
           root.__support_history_observer_attached = true;
           root.__support_history_observer = obs;
           attachHistoryListeners(root);
-          console.debug('[support_modal_manager3] history MutationObserver attached to', cid);
-        } catch(e){ console.warn('[support_modal_manager3] observeHistoryContainer failed', e); }
+          console.debug('[support_client] history MutationObserver attached to', cid);
+        } catch(e){ console.warn('[support_client] observeHistoryContainer failed', e); }
       }
 
       // run initial attach and observer
@@ -523,10 +527,10 @@
         // retries for slower renderers
         setTimeout(function(){ attachHistoryListeners(); }, 300);
         setTimeout(function(){ attachHistoryListeners(); }, 1000);
-      } catch(e){ console.warn('[support_modal_manager3] history patch init failed', e); }
+      } catch(e){ console.warn('[support_client] history support init failed', e); }
 
     } catch(err) {
-      console.error('[support_modal_manager3] installIntegratedHistoryPatch top-level error', err);
+      console.error('[support_client] installIntegratedHistoryPatch top-level error', err);
     }
   })();
 

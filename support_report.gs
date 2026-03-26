@@ -153,7 +153,7 @@ function _normalizeReportForTemplate(reportType, reportData) {
 }
 
 /**
- * exportSupportReportPdf_inline (patched)
+ * exportSupportReportPdf_inline
  *
  * - Uses sheet-side aggregation when available (buildItemsFromAgg) for per-item monthly reports.
  * - Falls back to _getReportData when appropriate.

@@ -41,8 +41,16 @@ Google Apps Script web app for budget management and support-budget reporting.
   Modal lifecycle and shared backdrop management.
 - `client_rpc_adapter.html`
   Promise-based RPC wrappers with retry support.
-- `record-expense-hotfix.html`
-  Temporary adapter for save flow normalization and dedupe.
+- `JavaScript_export_enhancements.html`
+  Export-specific bindings for dashboard and work-detail modals.
+- `JavaScript_fallback_shims.html`
+  Lightweight compatibility shims for alerts and work-detail fallback behavior.
+- `JavaScript_workdetail_modal.html`
+  Work-detail modal creation/opening wrapper.
+- `JavaScript_workdetail_ui.html`
+  Work-detail table rendering tweaks and action cleanup.
+- `JavaScript_card_export_visibility.html`
+  Hides stray export buttons in card contexts while preserving modal exports.
 
 ## Files Excluded From Apps Script Push
 
@@ -80,13 +88,15 @@ Completed:
 - Renamed source files from `.txt` to `.gs` / `.html`
 - Rebuilt `Index.html`
 - Extracted core/UI/modal responsibilities
+- Moved expense save flow into `JavaScript_core.html`
+- Removed `record-expense-hotfix.html`
+- Reduced work-detail code from patch-heavy scripts into narrower modules
+- Removed empty include modules that no longer contributed runtime behavior
 - Added `appsscript.json`
 - Added `clasp` helper files
 
 Still worth improving:
 
-- Reduce reliance on `record-expense-hotfix.html`
-- Review whether `JavaScript_auto_restore_core.html` is still needed
-- Replace work-detail patches with a cleaner first-class module
-- Remove or simplify remaining patch-oriented HTML includes
+- Consider merging work-detail modules into a single first-class feature module
+- Add browser-level verification after the recent frontend refactor
 

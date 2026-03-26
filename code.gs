@@ -213,6 +213,43 @@ function parseNumberSafe(value) {
   }
 }
 
+function normalizeAccessValue(value) {
+  return String(value == null ? '' : value)
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeRoleValue(role) {
+  const normalized = normalizeAccessValue(role);
+  if (!normalized) return '';
+
+  if ([
+    'admin',
+    'administrator',
+    'super admin',
+    'superadmin',
+    'ผู้ดูแลระบบ',
+    'แอดมิน'
+  ].includes(normalized)) {
+    return 'admin';
+  }
+
+  if ([
+    'viewer',
+    'read only',
+    'readonly',
+    'ดูอย่างเดียว',
+    'ผู้ดู',
+    'อ่านอย่างเดียว'
+  ].includes(normalized)) {
+    return 'viewer';
+  }
+
+  return normalized;
+}
+
 // ==================== BUDGET CALCULATION ====================
 
 function calculateBudgetSafely(budget, used, addAmount) {
@@ -236,8 +273,13 @@ function calculateBudgetSafely(budget, used, addAmount) {
 
 function hasAccessToRow(user, rowDepartment) {
   if (!user) return false;
-  if (user.role === 'admin') return Boolean(user.email && user.email.trim());
-  return Boolean(user.department && user.department === rowDepartment);
+  if (normalizeRoleValue(user.role) === 'admin') {
+    return Boolean(user.email && String(user.email).trim());
+  }
+
+  const userDept = normalizeAccessValue(user.department);
+  const rowDept = normalizeAccessValue(rowDepartment);
+  return Boolean(userDept && rowDept && userDept === rowDept);
 }
 
 function sanitizeHtmlForPDF(html) {
@@ -295,7 +337,12 @@ function getUserPermission() {
     const data = usersSheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
       if ((data[i][0] || '').toString().trim().toLowerCase() === email) {
-        return { email: data[i][0], department: data[i][1], role: data[i][2] };
+        return {
+          email: (data[i][0] || '').toString().trim(),
+          department: (data[i][1] || '').toString().trim(),
+          role: normalizeRoleValue(data[i][2]),
+          rawRole: (data[i][2] || '').toString().trim()
+        };
       }
     }
     return null;
@@ -382,11 +429,11 @@ function getInitialData() {
 
       if (!dept && !itemVal) continue;
       if (!hasAccessToRow(user, dept)) continue;
+      const itemId = normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : '');
 
       const budget    = parseNumberSafe(row[cols.budget]);
       const used      = (cols.used      !== -1) ? parseNumberSafe(row[cols.used])      : 0;
       const remaining = (cols.remaining !== -1) ? parseNumberSafe(row[cols.remaining]) : 0;
-      const itemId    = normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : '');
 
       // items
       items.push({
@@ -783,6 +830,57 @@ function getTransactionHistory(itemId) {
   }
 }
 
+function getTransferTotalsByItemId() {
+  try {
+    const logSheet = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
+    if (!logSheet) return {};
+
+    const data = logSheet.getDataRange().getValues();
+    if (!data || data.length < 2) return {};
+
+    const headers = (data[0] || []).map(h => (h || '').toString().trim());
+    const colItemId = findHeaderIndex(headers, ['item id','itemid','item','รหัส','id']) !== -1
+      ? findHeaderIndex(headers, ['item id','itemid','item','รหัส','id']) : 3;
+    const colAmount = findHeaderIndex(headers, ['amount']) !== -1
+      ? findHeaderIndex(headers, ['amount']) : 4;
+    const colType = findHeaderIndex(headers, ['type']) !== -1
+      ? findHeaderIndex(headers, ['type']) : 9;
+    const colStatus = findHeaderIndex(headers, ['status']);
+
+    const totals = {};
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i] || [];
+      const status = colStatus !== -1 ? String(row[colStatus] || 'ACTIVE').trim().toUpperCase() : 'ACTIVE';
+      if (status === 'CANCELLED') continue;
+
+      const type = String(row[colType] || '').trim().toUpperCase();
+      if (type !== 'TRANSFER_IN' && type !== 'TRANSFER_OUT') continue;
+
+      const itemId = normalizeItemId((row[colItemId] || '') + '');
+      if (!itemId) continue;
+
+      const amount = parseNumberSafe(row[colAmount]);
+      if (!amount) continue;
+
+      if (!totals[itemId]) {
+        totals[itemId] = { transferIn: 0, transferOut: 0, netTransfer: 0 };
+      }
+
+      if (type === 'TRANSFER_IN') {
+        totals[itemId].transferIn = parseFloat((totals[itemId].transferIn + Math.abs(amount)).toFixed(2));
+      } else {
+        totals[itemId].transferOut = parseFloat((totals[itemId].transferOut + Math.abs(amount)).toFixed(2));
+      }
+      totals[itemId].netTransfer = parseFloat((totals[itemId].transferIn - totals[itemId].transferOut).toFixed(2));
+    }
+
+    return totals;
+  } catch (error) {
+    handleError('getTransferTotalsByItemId', error);
+    return {};
+  }
+}
+
 // ==================== DASHBOARD ====================
 
 function getDashboardData() {
@@ -794,15 +892,20 @@ function getDashboardData() {
     const data = budgetSheet.getDataRange().getValues();
     if (!data || data.length < 2) return createResponse(false, 'Sheet งบประมาณไม่มีข้อมูล');
     const cols = getColumnIndices(data[0]);
+    const transferTotals = getTransferTotalsByItemId();
     const workSummary = {};
     for (let i = 1; i < data.length; i++) {
       const row  = data[i];
       const dept = row[cols.department] || '';
       if (!hasAccessToRow(user, dept)) continue;
       const work = row[cols.work] || 'ไม่ระบุ';
-      if (!workSummary[work]) workSummary[work] = { work, totalBudget:0, totalUsed:0, totalRemaining:0, items:0 };
+      if (!workSummary[work]) workSummary[work] = { work, totalBudget:0, totalUsed:0, totalTransferIn:0, totalTransferOut:0, totalRemaining:0, items:0 };
+      const itemId = normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : '');
+      const transfer = transferTotals[itemId] || {};
       workSummary[work].totalBudget    += parseNumberSafe(row[cols.budget]);
       workSummary[work].totalUsed      += parseNumberSafe(row[cols.used]);
+      workSummary[work].totalTransferIn += parseNumberSafe(transfer.transferIn || 0);
+      workSummary[work].totalTransferOut += parseNumberSafe(transfer.transferOut || 0);
       workSummary[work].totalRemaining += parseNumberSafe(row[cols.remaining]);
       workSummary[work].items          += 1;
     }
@@ -822,11 +925,14 @@ function getWorkDetails(workName) {
     const data = budgetSheet.getDataRange().getValues();
     if (!data || data.length < 2) return createResponse(false, 'Sheet งบประมาณไม่มีข้อมูล');
     const cols = getColumnIndices(data[0]);
+    const transferTotals = getTransferTotalsByItemId();
     const detailedData = [];
     for (let i = 1; i < data.length; i++) {
       const row  = data[i];
       const dept = row[cols.department] || '';
       if (!hasAccessToRow(user, dept) || row[cols.work] !== workName) continue;
+      const itemId = normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : '');
+      const transfer = transferTotals[itemId] || {};
       detailedData.push({
         work:        row[cols.work]        || 'ไม่ระบุ',
         budgetType:  (cols.budgetType  !== -1) ? (row[cols.budgetType]  || 'ไม่ระบุ') : 'ไม่ระบุ',
@@ -835,6 +941,8 @@ function getWorkDetails(workName) {
         item:        (cols.item        !== -1) ? (row[cols.item]        || 'ไม่ระบุ') : 'ไม่ระบุ',
         budget:    parseNumberSafe(row[cols.budget]),
         used:      parseNumberSafe(row[cols.used]),
+        transferIn: parseNumberSafe(transfer.transferIn || 0),
+        transferOut: parseNumberSafe(transfer.transferOut || 0),
         remaining: parseNumberSafe(row[cols.remaining])
       });
     }

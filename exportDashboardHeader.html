@@ -270,7 +270,7 @@
       header.style.boxSizing = 'border-box';
       header.style.background = '#fff';
       header.style.width = contentWidthPx + 'px';
-      header.style.padding = '6px';
+      header.style.padding = '4px 0 0 0';
 
       const centerDiv = document.createElement('div');
       centerDiv.style.textAlign = 'center';
@@ -296,7 +296,7 @@
       centerDiv.appendChild(userDiv);
 
       // give a small gap below main header so chart titles can fit between header and charts
-      centerDiv.style.marginBottom = '8px';
+      centerDiv.style.marginBottom = '10px';
       header.appendChild(centerDiv);
 
       // insert up to 2 chart previews (best-effort) — include chart title above each image
@@ -308,8 +308,9 @@
       if (canvases.length) {
         const row = document.createElement('div');
         row.style.display = 'flex';
-        row.style.gap = '12px';
+        row.style.gap = '18px';
         row.style.justifyContent = 'space-between';
+        row.style.alignItems = 'stretch';
         for (let i=0;i<Math.min(2, canvases.length); i++) {
           try {
             const c = canvases[i];
@@ -354,8 +355,9 @@
 
             if (url) {
               const col = document.createElement('div');
-              col.style.flex = '1 1 48%';
+              col.style.flex = '1 1 49%';
               col.style.boxSizing = 'border-box';
+              col.style.minWidth = '0';
 
               // add title above image (this is the change you asked for)
               if (chartTitle && chartTitle.trim()) {
@@ -365,20 +367,21 @@
                 t.style.fontWeight = '600';
                 t.style.color = '#333';
                 t.style.textAlign = 'center';
-                t.style.margin = '8px 0 6px 0';
+                t.style.margin = '4px 0 8px 0';
                 col.appendChild(t);
               } else {
                 // keep a small spacer so layout remains consistent even if no title found
                 const spacer = document.createElement('div');
-                spacer.style.height = '12px';
+                spacer.style.height = '10px';
                 col.appendChild(spacer);
               }
 
               const img = document.createElement('img');
               img.src = url;
-              // Shrink chart previews slightly so title fits without pushing table too far
               img.style.maxWidth = '100%';
-              img.style.maxHeight = '260px'; // reduced height to give room for titles
+              img.style.width = '100%';
+              img.style.maxHeight = '400px';
+              img.style.minHeight = '320px';
               img.style.height = 'auto';
               img.style.display = 'block';
               img.style.margin = '0 auto';

@@ -75,9 +75,9 @@
       const marginPt = (typeof opts.marginPt === 'number') ? opts.marginPt : 36;
       const usableHeightPt = pageHeightPt - (marginPt * 2);
 
-      // allow override from opts; keep default 0.6
-      const headerRatio = (typeof opts.headerRatio === 'number') ? opts.headerRatio : 0.6;
-      const headerTargetHeightPt = Math.max(80, Math.min(usableHeightPt * headerRatio, usableHeightPt - 40));
+      // Default to a large first-page hero area so the charts fill page 1.
+      const headerRatio = (typeof opts.headerRatio === 'number') ? opts.headerRatio : 0.86;
+      const headerTargetHeightPt = Math.max(180, Math.min(usableHeightPt * headerRatio, usableHeightPt - 8));
 
       const contentWidthPt = pageWidthPt - marginPt*2;
 
@@ -140,7 +140,7 @@
         pdf.text(fallbackText, pageWidthPt/2, marginPt+14, { align:'center' });
       }
 
-      const writerOpts = Object.assign({}, opts, { mergeFirst: true });
+      const writerOpts = Object.assign({}, opts, { mergeFirst: false });
       const tableResult = (typeof G.appendDashboardTablesToPdf === 'function')
         ? await G.appendDashboardTablesToPdf(pdf, headerMeta || null, writerOpts)
         : { ok:false, reason:'no-append-function' };

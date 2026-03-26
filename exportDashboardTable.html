@@ -10,7 +10,7 @@
     rawHeaders.forEach((h, idx) => {
       const lk = (h||'').toLowerCase();
       // broaden detection of action-like columns
-      if (lk.includes('action') || lk.includes('ปฏิบัติ') || lk.includes('ปุ่ม') || lk.includes('ดำเนินการ') || lk.includes('operation') || lk.includes('actions')) skipIdx.add(idx);
+      if (lk.includes('action') || lk.includes('ปฏิบัติ') || lk.includes('ปุ่ม') || lk.includes('ดำเนินการ') || lk.includes('operation') || lk.includes('actions') || lk.includes('รายละเอียด')) skipIdx.add(idx);
     });
     const headers = rawHeaders.filter((_, idx)=> !skipIdx.has(idx));
 
@@ -24,7 +24,7 @@
       const v = parseFloat(n);
       return isNaN(v) ? 0 : v;
     }
-    const numericColCandidates = ['งบ','งบรวม','เบิก','คงเหลือ','amount','total','used','budget','ยอดรวม','รวม'];
+    const numericColCandidates = ['งบ','งบรวม','เบิก','โอนเข้า','โอนออก','โอน','คงเหลือ','amount','total','used','transfer','budget','ยอดรวม','รวม'];
     const isNumericCol = (hdr) => {
       const x = (hdr||'').toLowerCase();
       return numericColCandidates.some(k => x.includes(k));
@@ -202,7 +202,6 @@
         pdf.addPage();
       }
     } else {
-      pdf.addPage();
       startIndex = 0;
     }
 

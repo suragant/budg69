@@ -1,0 +1,156 @@
+<script>
+(function(window, document){
+  'use strict';
+
+  if (window._wd_workdetail_modal_installed) return;
+  window._wd_workdetail_modal_installed = true;
+
+  function ensureWorkDetailModalLocal() {
+    try {
+      var existing = document.getElementById('workDetailModal');
+      if (existing) return existing;
+
+      var modal = document.createElement('div');
+      modal.id = 'workDetailModal';
+      modal.className = 'modal';
+      modal.style.display = 'none';
+      modal.style.position = 'fixed';
+      modal.style.inset = '0';
+      modal.style.zIndex = '10050';
+      modal.style.alignItems = 'center';
+      modal.style.justifyContent = 'center';
+
+      modal.innerHTML = '\
+        <div class="modal-content modal-content-large" role="dialog" aria-modal="true" style="max-width:1280px;width:96vw;">\
+          <div style="padding:12px 16px; display:flex; justify-content:flex-start; align-items:center; border-bottom:1px solid #eee;">\
+            <strong id="workDetailTitle" style="font-size:16px">รายละเอียด</strong>\
+          </div>\
+          <div id="workDetailContent" style="padding:16px; max-height:70vh; overflow:auto;">กำลังโหลด...</div>\
+          <div id="workDetailActions" class="modal-actions" style="padding:12px 16px; display:flex; gap:8px; justify-content:flex-end; border-top:1px solid #eee;">\
+            <button type="button" class="print-btn" data-action="print-workdetail" style="padding:6px 12px;">พิมพ์</button>\
+            <button type="button" class="btn btn-primary" data-action="export-workdetail" style="padding:6px 12px;">Export PDF</button>\
+            <button type="button" class="btn btn-secondary" data-action="close-modal" data-target="workDetailModal" style="padding:6px 12px;">ปิด</button>\
+          </div>\
+        </div>';
+
+      document.body.appendChild(modal);
+
+      modal.addEventListener('click', function(evt){
+        try {
+          var modalContent = modal.querySelector('.modal-content');
+          if (modalContent && !modalContent.contains(evt.target)) {
+            if (typeof window.closeModal === 'function') window.closeModal('workDetailModal');
+            else modal.classList.remove('active');
+          }
+        } catch (e) {}
+      }, false);
+
+      return modal;
+    } catch (e) {
+      console.warn('ensureWorkDetailModalLocal failed', e);
+      return null;
+    }
+  }
+
+  function openWorkDetailModal() {
+    try {
+      var modal = document.getElementById('workDetailModal') || ensureWorkDetailModalLocal();
+      if (!modal) return false;
+
+      if (typeof window.openModal === 'function') {
+        try {
+          window.openModal(modal, { zIndex: 10050 });
+          return true;
+        } catch (e) {}
+      }
+
+      modal.style.display = 'flex';
+      modal.style.visibility = 'visible';
+      modal.style.pointerEvents = 'auto';
+      modal.style.opacity = '1';
+      modal.classList.add('active');
+      return true;
+    } catch (e) {
+      console.warn('openWorkDetailModal error', e);
+      return false;
+    }
+  }
+
+  function renderFallbackMessage(message) {
+    try {
+      var content = document.getElementById('workDetailContent');
+      if (content) content.innerHTML = '<div style="padding:20px;color:#666;">' + message + '</div>';
+    } catch (e) {}
+  }
+
+  function fallbackLoadWorkDetails(workName) {
+    if (!(window.google && google.script && google.script.run)) {
+      renderFallbackMessage('ไม่สามารถโหลดรายละเอียดได้ในขณะนี้');
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(res){
+        try {
+          if (!res || !res.success) {
+            if (typeof window.closeModal === 'function') window.closeModal('workDetailModal');
+            if (typeof window.showCustomAlert === 'function') {
+              window.showCustomAlert('error', 'ไม่พบข้อมูล', (res && res.message) ? res.message : 'ไม่พบข้อมูล');
+            }
+            return;
+          }
+
+          var detailed = res.detailedData || [];
+          window.State = window.State || {};
+          window.State.dashboardDetailedData = detailed;
+
+          if (typeof window.renderWorkExpenseTypes === 'function') {
+            window.renderWorkExpenseTypes(workName, detailed);
+            return;
+          }
+
+          renderFallbackMessage('ไม่พบฟังก์ชัน renderWorkExpenseTypes');
+        } catch (e) {
+          console.error('fallbackLoadWorkDetails successHandler error', e);
+        }
+      })
+      .withFailureHandler(function(err){
+        if (typeof window.closeModal === 'function') window.closeModal('workDetailModal');
+        if (typeof window.showCustomAlert === 'function') {
+          window.showCustomAlert('error', 'เกิดข้อผิดพลาด', String(err));
+        }
+      })
+      .getWorkDetails(workName);
+  }
+
+  var originalShow = typeof window.showWorkExpenseTypes === 'function' ? window.showWorkExpenseTypes : null;
+  if (originalShow && !window._wd_original_showWorkExpenseTypes) {
+    window._wd_original_showWorkExpenseTypes = originalShow;
+  }
+
+  window.showWorkExpenseTypes = function(workName) {
+    ensureWorkDetailModalLocal();
+    openWorkDetailModal();
+
+    try {
+      var titleEl = document.getElementById('workDetailTitle');
+      if (titleEl) titleEl.textContent = 'รายละเอียดงาน: ' + (workName || '');
+    } catch (e) {}
+
+    try {
+      var content = document.getElementById('workDetailContent');
+      if (content) content.innerHTML = '<div style="padding:40px;text-align:center;">กำลังโหลดข้อมูล...</div>';
+    } catch (e) {}
+
+    if (originalShow) {
+      try {
+        return originalShow.apply(this, arguments);
+      } catch (e) {
+        console.error('showWorkExpenseTypes original threw', e);
+      }
+    }
+
+    fallbackLoadWorkDetails(workName);
+  };
+})(window, document);
+</script>

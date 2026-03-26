@@ -713,6 +713,14 @@ body {
   max-height: 360px !important; /* reduce height for export */
   height: auto !important;
 }
+.chart-container canvas,
+#dashboardModal .chart-container canvas,
+#dashboardContainer .chart-container canvas {
+  max-height: none !important;
+  height: 280px !important;
+  width: 100% !important;
+  display: block !important;
+}
 .dashboard-summary-box { margin-bottom: 8px !important; }
 
 /* ==================== FORM ERROR STYLES ==================== */

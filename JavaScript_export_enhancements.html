@@ -1,0 +1,513 @@
+<script>
+(function(window, document){
+  'use strict';
+
+  function safeLog() {
+    try { console.debug.apply(console, arguments); } catch (e) {}
+  }
+
+  function markBound(el, flagName) {
+    try { if (el) el[flagName] = true; } catch (e) {}
+  }
+
+  function isBound(el, flagName) {
+    try { return !!(el && el[flagName]); } catch (e) { return false; }
+  }
+
+  function escapeHtml(value) {
+    var text = value == null ? '' : String(value);
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function ensurePdfLibs() {
+    if (window.__pdfLibsPromise) return window.__pdfLibsPromise;
+
+    function loadScript(src) {
+      return new Promise(function(resolve, reject) {
+        var existing = document.querySelector('script[src="' + src + '"]');
+        if (existing) {
+          if (existing.dataset.loaded === '1') return resolve(true);
+          existing.addEventListener('load', function() { resolve(true); }, { once: true });
+          existing.addEventListener('error', reject, { once: true });
+          return;
+        }
+
+        var script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = function() {
+          script.dataset.loaded = '1';
+          resolve(true);
+        };
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    window.__pdfLibsPromise = (async function() {
+      if (typeof window.html2canvas === 'undefined') {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      }
+      if (!(window.jspdf && window.jspdf.jsPDF)) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      }
+      return true;
+    })();
+
+    return window.__pdfLibsPromise;
+  }
+
+  async function exportElementToPdf(element, fileName) {
+    if (!element) return false;
+    await ensurePdfLibs();
+    if (!(window.html2canvas && window.jspdf && window.jspdf.jsPDF)) {
+      throw new Error('PDF libraries not available');
+    }
+
+    var html2canvas = window.html2canvas;
+    var jsPDF = window.jspdf.jsPDF;
+    var canvas = await html2canvas(element, {
+      scale: Math.max(2, window.devicePixelRatio || 1),
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false
+    });
+
+    var imgData = canvas.toDataURL('image/png');
+    var pdf = new jsPDF('p', 'pt', 'a4');
+    var pageWidth = pdf.internal.pageSize.getWidth();
+    var pageHeight = pdf.internal.pageSize.getHeight();
+    var margin = 24;
+    var usableWidth = pageWidth - margin * 2;
+    var usableHeight = pageHeight - margin * 2;
+    var imgWidth = usableWidth;
+    var imgHeight = canvas.height * imgWidth / canvas.width;
+
+    if (imgHeight <= usableHeight) {
+      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight);
+    } else {
+      var ratio = usableWidth / canvas.width;
+      var pageCanvas = document.createElement('canvas');
+      var pageCtx = pageCanvas.getContext('2d');
+      var pagePixelHeight = Math.floor(usableHeight / ratio);
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = pagePixelHeight;
+
+      var rendered = 0;
+      var pageIndex = 0;
+      while (rendered < canvas.height) {
+        pageCtx.fillStyle = '#fff';
+        pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        pageCtx.drawImage(
+          canvas,
+          0, rendered, canvas.width, Math.min(pagePixelHeight, canvas.height - rendered),
+          0, 0, pageCanvas.width, Math.min(pagePixelHeight, canvas.height - rendered)
+        );
+        if (pageIndex > 0) pdf.addPage();
+        var sliceHeight = Math.min(pagePixelHeight, canvas.height - rendered);
+        pdf.addImage(
+          pageCanvas.toDataURL('image/png'),
+          'PNG',
+          margin,
+          margin,
+          usableWidth,
+          sliceHeight * ratio
+        );
+        rendered += pagePixelHeight;
+        pageIndex += 1;
+      }
+    }
+
+    pdf.save(fileName || 'Export.pdf');
+    return true;
+  }
+
+  async function exportElementsToPdf(elements, fileName, options) {
+    var pages = Array.isArray(elements) ? elements.filter(Boolean) : [];
+    if (!pages.length) return false;
+
+    await ensurePdfLibs();
+    if (!(window.html2canvas && window.jspdf && window.jspdf.jsPDF)) {
+      throw new Error('PDF libraries not available');
+    }
+
+    var html2canvas = window.html2canvas;
+    var jsPDF = window.jspdf.jsPDF;
+    var orientation = (options && options.orientation) || 'p';
+    var margin = (options && options.margin) || 24;
+    var pdf = new jsPDF(orientation, 'pt', 'a4');
+    var pageWidth = pdf.internal.pageSize.getWidth();
+    var pageHeight = pdf.internal.pageSize.getHeight();
+    var usableWidth = pageWidth - margin * 2;
+    var usableHeight = pageHeight - margin * 2;
+
+    for (var i = 0; i < pages.length; i += 1) {
+      var canvas = await html2canvas(pages[i], {
+        scale: Math.max(2, window.devicePixelRatio || 1),
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+
+      if (i > 0) pdf.addPage();
+
+      var imgWidth = usableWidth;
+      var imgHeight = canvas.height * imgWidth / canvas.width;
+      if (imgHeight > usableHeight) {
+        imgHeight = usableHeight;
+        imgWidth = canvas.width * imgHeight / canvas.height;
+      }
+
+      var x = margin + Math.max(0, (usableWidth - imgWidth) / 2);
+      var y = margin;
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, imgWidth, imgHeight);
+    }
+
+    pdf.save(fileName || 'Export.pdf');
+    return true;
+  }
+
+  function styleReportTable(table) {
+    if (!table) return;
+    table.style.width = '100%';
+    table.style.borderCollapse = 'collapse';
+    table.style.tableLayout = 'fixed';
+    table.style.pageBreakInside = 'avoid';
+    var thead = table.querySelector('thead');
+    var tbody = table.querySelector('tbody');
+    if (thead) thead.style.display = 'table-header-group';
+    if (tbody) tbody.style.display = 'table-row-group';
+    Array.from(table.querySelectorAll('th, td')).forEach(function(cell) {
+      cell.style.border = '1px solid #d9d9d9';
+      cell.style.padding = '10px 12px';
+      cell.style.verticalAlign = 'top';
+      cell.style.wordBreak = 'break-word';
+      if (cell.tagName === 'TH') {
+        cell.style.background = '#f4f4f4';
+        cell.style.fontWeight = '700';
+      }
+      if (/right/i.test(cell.style.textAlign || '')) {
+        cell.style.whiteSpace = 'nowrap';
+      }
+    });
+  }
+
+  function buildPaginatedWorkDetailTables(summaryTable) {
+    if (!summaryTable) return [];
+
+    var thead = summaryTable.querySelector('thead');
+    var bodyRows = Array.from(summaryTable.querySelectorAll('tbody tr'));
+    if (!thead || !bodyRows.length) return [];
+
+    var chunks = [];
+    var rowsPerPage = 18;
+    for (var i = 0; i < bodyRows.length; i += rowsPerPage) {
+      var table = document.createElement('table');
+      table.id = i === 0 ? 'workDetailSummaryTable' : '';
+      table.style.width = '100%';
+      table.style.borderCollapse = 'collapse';
+      table.style.background = '#fff';
+      table.style.tableLayout = 'fixed';
+      table.appendChild(thead.cloneNode(true));
+
+      var tbody = document.createElement('tbody');
+      bodyRows.slice(i, i + rowsPerPage).forEach(function(row) {
+        tbody.appendChild(row.cloneNode(true));
+      });
+      table.appendChild(tbody);
+      styleReportTable(table);
+      chunks.push(table);
+    }
+    return chunks;
+  }
+
+  function createWorkDetailHeaderBlock(title, userText, workTitle) {
+    var header = document.createElement('div');
+    header.style.textAlign = 'center';
+    header.style.marginBottom = '18px';
+    header.innerHTML =
+      '<div style="font-size:24px;font-weight:700;margin-bottom:6px;">' + escapeHtml(title) + '</div>'
+      + '<div style="font-size:13px;color:#555;margin-bottom:4px;">พิมพ์เมื่อ: ' + escapeHtml(new Date().toLocaleString('th-TH')) + '</div>'
+      + '<div style="font-size:13px;color:#555;">ผู้ใช้งาน: ' + escapeHtml(userText) + '</div>'
+      + '<div style="font-size:15px;font-weight:600;margin-top:12px;text-align:left;color:#222;">' + escapeHtml(workTitle || '-') + '</div>';
+    return header;
+  }
+
+  function buildWorkDetailExportPages() {
+    var title = (document.getElementById('workDetailTitle') || {}).textContent || 'รายละเอียดงาน';
+    var userText = (document.getElementById('userEmail') || {}).textContent || '';
+    var workTitle = '';
+    var reportRoot = document.getElementById('workDetailReport');
+    var summaryTable = document.getElementById('workDetailSummaryTable');
+    var totalsBlock = document.getElementById('workDetailTotals');
+    var reportSections = reportRoot ? Array.from(reportRoot.children || []) : [];
+    reportSections.some(function(node) {
+      if (!node || !node.textContent) return false;
+      var text = String(node.textContent || '').trim();
+      if (text && text !== title) {
+        workTitle = text;
+        return true;
+      }
+      return false;
+    });
+
+    var builtTables = buildPaginatedWorkDetailTables(summaryTable);
+    if (!builtTables.length && summaryTable) {
+      var singleTable = summaryTable.cloneNode(true);
+      styleReportTable(singleTable);
+      builtTables = [singleTable];
+    }
+
+    return builtTables.map(function(table, index) {
+      var page = document.createElement('div');
+      page.style.background = '#fff';
+      page.style.width = '1600px';
+      page.style.boxSizing = 'border-box';
+      page.style.padding = '22px 26px';
+      page.style.color = '#111';
+      page.style.fontFamily = 'Arial, Tahoma, sans-serif';
+      page.appendChild(createWorkDetailHeaderBlock(title, userText, workTitle));
+
+      var tableWrap = document.createElement('div');
+      tableWrap.style.width = '100%';
+      tableWrap.style.background = '#fff';
+      tableWrap.appendChild(table);
+      page.appendChild(tableWrap);
+
+      if (index === builtTables.length - 1 && totalsBlock) {
+        var totalsClone = totalsBlock.cloneNode(true);
+        totalsClone.style.marginTop = '14px';
+        page.appendChild(totalsClone);
+      }
+
+      return page;
+    });
+  }
+
+  function buildWorkDetailExportElement() {
+    var wrapper = document.createElement('div');
+    var title = (document.getElementById('workDetailTitle') || {}).textContent || 'รายละเอียดงาน';
+    var userText = (document.getElementById('userEmail') || {}).textContent || '';
+    var reportRoot = document.getElementById('workDetailReport');
+    var summaryTable = document.getElementById('workDetailSummaryTable');
+    var totalsBlock = document.getElementById('workDetailTotals');
+
+    wrapper.style.background = '#fff';
+    wrapper.style.padding = '24px';
+    wrapper.style.width = '1200px';
+    wrapper.style.boxSizing = 'border-box';
+    wrapper.innerHTML =
+      '<div style="text-align:center;margin-bottom:18px;">'
+      + '  <div style="font-size:28px;font-weight:700;margin-bottom:6px;">' + escapeHtml(title) + '</div>'
+      + '  <div style="font-size:14px;color:#555;margin-bottom:4px;">พิมพ์เมื่อ: ' + escapeHtml(new Date().toLocaleString('th-TH')) + '</div>'
+      + '  <div style="font-size:14px;color:#555;">ผู้ใช้งาน: ' + escapeHtml(userText) + '</div>'
+      + '</div>';
+
+    var builtTables = buildPaginatedWorkDetailTables(summaryTable);
+    if (builtTables.length) {
+      var tablesHost = document.createElement('div');
+      builtTables.forEach(function(table, index) {
+        var pageBlock = document.createElement('div');
+        pageBlock.style.background = '#fff';
+        pageBlock.style.pageBreakInside = 'avoid';
+        pageBlock.style.breakInside = 'avoid';
+        if (index > 0) {
+          pageBlock.style.marginTop = '18px';
+          pageBlock.style.paddingTop = '8px';
+        }
+        pageBlock.appendChild(table);
+        tablesHost.appendChild(pageBlock);
+      });
+      wrapper.appendChild(tablesHost);
+    } else if (reportRoot) {
+      var reportClone = reportRoot.cloneNode(true);
+      var nestedHeader = reportClone.querySelector('div[style*="text-align:center"]');
+      if (nestedHeader) {
+        try { nestedHeader.parentNode.removeChild(nestedHeader); } catch (e) {}
+      }
+      Array.from(reportClone.querySelectorAll('#workDetailTotals')).forEach(function(node) {
+        try { node.parentNode && node.parentNode.removeChild(node); } catch (e) {}
+      });
+      Array.from(reportClone.querySelectorAll('table')).forEach(styleReportTable);
+      wrapper.appendChild(reportClone);
+    } else if (summaryTable) {
+      var tableClone = summaryTable.cloneNode(true);
+      styleReportTable(tableClone);
+      wrapper.appendChild(tableClone);
+    }
+
+    if (totalsBlock) {
+      var totalsClone = totalsBlock.cloneNode(true);
+      totalsClone.style.marginTop = '14px';
+      wrapper.appendChild(totalsClone);
+    }
+
+    return wrapper;
+  }
+
+  function printElement(element, title) {
+    try {
+      if (!element) return false;
+      var printWindow = window.open('', '_blank', 'width=1200,height=900');
+      if (!printWindow) return false;
+
+      var styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+        .map(function(node) { return node.outerHTML; })
+        .join('\n');
+
+      printWindow.document.open();
+      printWindow.document.write(
+        '<!doctype html><html><head><title>' + (title || 'Print') + '</title>'
+        + styles
+        + '<style>body{padding:24px;font-family:sans-serif;} .modal-actions, button{display:none !important;}</style>'
+        + '</head><body>' + element.outerHTML + '</body></html>'
+      );
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(function() {
+        try { printWindow.print(); } catch (e) {}
+      }, 300);
+      return true;
+    } catch (e) {
+      console.warn('printElement failed', e);
+      return false;
+    }
+  }
+
+  function installExportAliases() {
+    if (!window.exportDashboard && typeof window.exportDashboardCoordinator === 'function') {
+      window.exportDashboard = function() {
+        return window.exportDashboardCoordinator({ fileName: 'Dashboard.pdf' });
+      };
+    }
+
+    if (!window.exportCurrentDetail) {
+      window.exportCurrentDetail = function() {
+        if (typeof window.exportWorkDetailCapture === 'function') {
+          return window.exportWorkDetailCapture({ fileName: 'WorkDetail.pdf' });
+        }
+        var exportPages = buildWorkDetailExportPages();
+        var holder = document.createElement('div');
+        holder.style.position = 'fixed';
+        holder.style.left = '0';
+        holder.style.top = '0';
+        holder.style.opacity = '0';
+        holder.style.pointerEvents = 'none';
+        if (exportPages.length) {
+          exportPages.forEach(function(page) {
+            holder.appendChild(page);
+          });
+        } else {
+          holder.appendChild(buildWorkDetailExportElement());
+        }
+        document.body.appendChild(holder);
+        return (exportPages.length
+          ? exportElementsToPdf(exportPages, 'WorkDetail.pdf', { orientation: 'l', margin: 18 })
+          : exportElementToPdf(holder.firstChild, 'WorkDetail.pdf')
+        ).finally(function() {
+          try { document.body.removeChild(holder); } catch (e) {}
+        });
+      };
+    }
+
+    if (!window.printDashboard) {
+      window.printDashboard = function() {
+        var dashboardModal = document.getElementById('dashboardModal');
+        var dashboardContainer = document.getElementById('dashboardContainer');
+        return printElement(dashboardModal || dashboardContainer, 'Dashboard');
+      };
+    }
+
+    if (!window.printWorkDetail) {
+      window.printWorkDetail = function() {
+        var workDetailModal = document.getElementById('workDetailModal');
+        var workDetailContent = document.getElementById('workDetailContent');
+        return printElement(workDetailModal || workDetailContent, 'Work Detail');
+      };
+    }
+  }
+
+  function bindExportButtons(modal, actionName, fileName, fallbacks) {
+    if (!modal) return;
+
+    var buttons = Array.from(modal.querySelectorAll('button, a, .btn')).filter(function(el) {
+      try {
+        var txt = (el.innerText || el.textContent || '').toString().toLowerCase();
+        var action = ((el.getAttribute && el.getAttribute('data-action')) || '').toString().toLowerCase();
+        return action.indexOf(actionName) !== -1 || txt.indexOf('export') !== -1 || txt.indexOf('ส่งออก') !== -1;
+      } catch (e) {
+        return false;
+      }
+    });
+
+    buttons.forEach(function(btn) {
+      if (isBound(btn, '_wd_export_bound')) return;
+
+      btn.addEventListener('click', function() {
+        for (var i = 0; i < fallbacks.length; i++) {
+          var fn = fallbacks[i];
+          if (typeof window[fn] !== 'function') continue;
+          try {
+            if (fn === 'exportDashboardCoordinator' || fn === 'exportDashboardCapture' || fn === 'exportWorkDetailCapture') {
+              window[fn]({ fileName: fileName });
+            } else if (fn === 'createPdfReport') {
+              var html = (modal.querySelector('.modal-content') || {}).innerHTML || '';
+              window.createPdfReport(html, fileName.replace(/\.pdf$/i, ''), btn);
+            } else {
+              window[fn]();
+            }
+            return;
+          } catch (e) {
+            console.error('export handler failed', fn, e);
+          }
+        }
+
+        try { alert('ไม่พบเครื่องมือสำหรับ Export PDF ในหน้าปัจจุบัน'); } catch (e) {}
+      }, { passive: true });
+
+      markBound(btn, '_wd_export_bound');
+    });
+  }
+
+  function bindExportHandlersInModals() {
+    try {
+      bindExportButtons(
+        document.getElementById('dashboardModal'),
+        'export-dashboard',
+        'Dashboard.pdf',
+        ['exportDashboardCapture', 'exportDashboard', 'createPdfReport', 'exportDashboardCoordinator']
+      );
+
+      bindExportButtons(
+        document.getElementById('workDetailModal'),
+        'export-workdetail',
+        'WorkDetail.pdf',
+        ['exportWorkDetailCapture', 'exportCurrentDetail', 'createPdfReport', 'exportDashboardCoordinator']
+      );
+    } catch (e) {
+      console.warn('bindExportHandlersInModals error', e);
+    }
+  }
+
+  function initEnhancements() {
+    installExportAliases();
+    bindExportHandlersInModals();
+    setTimeout(bindExportHandlersInModals, 600);
+    setTimeout(bindExportHandlersInModals, 2000);
+    safeLog('Export enhancements initialized');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initEnhancements);
+  } else {
+    initEnhancements();
+  }
+
+  try { window._ensureExportEnhancements = initEnhancements; } catch (e) {}
+})(window, document);
+</script>

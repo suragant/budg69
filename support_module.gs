@@ -1,5 +1,5 @@
 /**
- * support_module.gs (patched)
+ * support_module.gs
  * - Safe index checks for mapSupportColumns results (ensure index >= 0 before using)
  * - Minor robustness improvements when interacting with sheets and logging
  */
@@ -80,8 +80,14 @@ function getSupportItemsSupport() {
         remaining: _isValidIndex(map.remainingMoney) ? Number(row[map.remainingMoney] || 0) : 0,
         note: _isValidIndex(map.note) ? row[map.note] : ''
       };
-      // permission filter: admin sees all, otherwise only own department (or empty)
-      if (!obj.department || user.role === 'admin' || obj.department === user.department) items.push(obj);
+      // permission filter: admin sees all, otherwise only own department (normalize spaces/case)
+      if (
+        !obj.department ||
+        user.role === 'admin' ||
+        normalizeAccessValue(obj.department) === normalizeAccessValue(user.department)
+      ) {
+        items.push(obj);
+      }
     }
 
     return createResponse(true, '', { user, items });

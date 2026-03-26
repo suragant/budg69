@@ -36,7 +36,7 @@
 
 #tileHeader {
   display: grid;
-  grid-template-columns: 180px 1fr 110px 110px 120px 140px;
+  grid-template-columns: 180px 160px 160px minmax(260px, 1fr) 110px 110px 120px 140px;
   gap: 0 12px;
   padding: 9px 16px;
   background: #667eea;
@@ -46,6 +46,31 @@
 }
 #tileHeader span { white-space: nowrap; }
 #tileHeader .th-right { text-align: right; }
+#tileHeader .tile-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+#tileHeader .tile-sort-btn::after {
+  content: '↕';
+  font-size: 11px;
+  opacity: 0.65;
+}
+#tileHeader .tile-sort-btn.is-active::after {
+  content: '↑';
+  opacity: 1;
+}
+#tileHeader .tile-sort-btn.is-active.desc::after {
+  content: '↓';
+}
 
 #budgetContainer.tile-view {
   display: block !important;
@@ -57,8 +82,8 @@
 
 #budgetContainer.tile-view .budget-card {
   display: grid !important;
-  grid-template-columns: 180px 1fr 110px 110px 120px 140px !important;
-  align-items: center !important;
+  grid-template-columns: 180px 160px 160px minmax(260px, 1fr) 110px 110px 120px 140px !important;
+  align-items: start !important;
   gap: 0 12px !important;
   border-radius: 0 !important;
   border: none !important;
@@ -85,36 +110,47 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+}
+.tile-department,
+.tile-budget-type {
+  font-size: 12px;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile-department { grid-column: 2; grid-row: 1; }
+.tile-budget-type { grid-column: 3; grid-row: 1; }
+.tile-department,
+.tile-budget-type {
+  align-self: start;
 }
 
 #budgetContainer.tile-view .card-body {
-  padding: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 2px !important;
+  display: none !important;
   min-width: 0;
   overflow: hidden;
 }
 #budgetContainer.tile-view .progress-ring,
 #budgetContainer.tile-view .detail-section,
 #budgetContainer.tile-view .budget-summary { display: none !important; }
-
-#budgetContainer.tile-view .card-body > div:first-child {
-  display: flex !important;
-  align-items: center !important;
-}
 #budgetContainer.tile-view .item-id {
-  margin-bottom: 0 !important;
-  font-size: 11px !important;
-  flex-shrink: 0;
+  display: none !important;
 }
 .tile-item-name {
   font-size: 12px;
-  color: #444;
+  color: #1f2937;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.4;
+  line-height: 1.35;
+  grid-column: 4;
+  grid-row: 1;
+  align-self: start;
 }
 
 #budgetContainer.tile-view .tile-amt {
@@ -126,8 +162,17 @@
 #budgetContainer.tile-view .tile-amt-budget    { color: #4CAF50; }
 #budgetContainer.tile-view .tile-amt-used      { color: #FF9800; }
 #budgetContainer.tile-view .tile-amt-remaining { color: #2196F3; }
+#budgetContainer.tile-view .tile-amt-budget { grid-column: 5; grid-row: 1; }
+#budgetContainer.tile-view .tile-amt-used { grid-column: 6; grid-row: 1; }
+#budgetContainer.tile-view .tile-amt-remaining { grid-column: 7; grid-row: 1; }
+#budgetContainer.tile-view .tile-amt,
+#budgetContainer.tile-view .card-actions {
+  align-self: start;
+}
 
 #budgetContainer.tile-view .card-actions {
+  grid-column: 8;
+  grid-row: 1;
   padding: 0 !important;
   gap: 6px !important;
   justify-content: flex-end !important;
@@ -148,16 +193,70 @@
   var STORAGE_KEY = 'budgetViewMode';
   var currentMode = 'card';
   var _btn = null;
+  var tileSortKey = '';
+  var tileSortDir = 'asc';
 
   function fmtNum(n) {
     return Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function compareText(a, b) {
+    return String(a || '').localeCompare(String(b || ''), 'th', { sensitivity: 'base', numeric: true });
+  }
+
+  function compareNumber(a, b) {
+    return Number(a || 0) - Number(b || 0);
+  }
+
+  function sortFilteredItems() {
+    if (!tileSortKey || !(window.State && Array.isArray(window.State.filteredItems))) return;
+    var dir = tileSortDir === 'desc' ? -1 : 1;
+    window.State.filteredItems.sort(function (a, b) {
+      if (tileSortKey === 'budget' || tileSortKey === 'used' || tileSortKey === 'remaining') {
+        return compareNumber(a && a[tileSortKey], b && b[tileSortKey]) * dir;
+      }
+      return compareText(a && a[tileSortKey], b && b[tileSortKey]) * dir;
+    });
+  }
+
+  function updateTileSortIndicators() {
+    var header = document.getElementById('tileHeader');
+    if (!header) return;
+    header.querySelectorAll('.tile-sort-btn').forEach(function (btn) {
+      var key = btn.getAttribute('data-sort-key') || '';
+      var active = key === tileSortKey;
+      btn.classList.toggle('is-active', active);
+      btn.classList.toggle('desc', active && tileSortDir === 'desc');
+    });
+  }
+
+  function bindTileHeaderSorting(header) {
+    if (!header || header.__tileSortBound) return;
+    header.__tileSortBound = true;
+    header.addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('.tile-sort-btn') : null;
+      if (!btn) return;
+      var key = btn.getAttribute('data-sort-key') || '';
+      if (!key) return;
+      if (tileSortKey === key) {
+        tileSortDir = tileSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        tileSortKey = key;
+        tileSortDir = (key === 'budget' || key === 'used' || key === 'remaining') ? 'desc' : 'asc';
+      }
+      sortFilteredItems();
+      updateTileSortIndicators();
+      if (typeof window.renderCards === 'function') {
+        window.renderCards((window.State && window.State.filteredItems) ? window.State.filteredItems : []);
+      }
+    });
   }
 
   /* ── ลบ tile injected elements ออกจาก card (ก่อน switch กลับ card) ── */
   function cleanupTileInjections() {
     var container = document.getElementById('budgetContainer');
     if (!container) return;
-    container.querySelectorAll('.tile-work, .tile-item-name, .tile-amt').forEach(function (el) {
+    container.querySelectorAll('.tile-work, .tile-department, .tile-budget-type, .tile-item-name, .tile-amt').forEach(function (el) {
       el.parentNode && el.parentNode.removeChild(el);
     });
   }
@@ -184,12 +283,16 @@
     var header = document.createElement('div');
     header.id = 'tileHeader';
     header.innerHTML =
-      '<span>แผนงาน</span>' +
-      '<span>รายการ</span>' +
-      '<span class="th-right">งบประมาณ</span>' +
-      '<span class="th-right">เบิกจ่าย</span>' +
-      '<span class="th-right">คงเหลือ</span>' +
+      '<span><button type="button" class="tile-sort-btn" data-sort-key="work">แผนงาน</button></span>' +
+      '<span><button type="button" class="tile-sort-btn" data-sort-key="department">หน่วยงาน</button></span>' +
+      '<span><button type="button" class="tile-sort-btn" data-sort-key="budgetType">ประเภทงบ</button></span>' +
+      '<span><button type="button" class="tile-sort-btn" data-sort-key="item">รายการ</button></span>' +
+      '<span class="th-right"><button type="button" class="tile-sort-btn" data-sort-key="budget">งบประมาณ</button></span>' +
+      '<span class="th-right"><button type="button" class="tile-sort-btn" data-sort-key="used">เบิกจ่าย</button></span>' +
+      '<span class="th-right"><button type="button" class="tile-sort-btn" data-sort-key="remaining">คงเหลือ</button></span>' +
       '<span class="th-right">การดำเนินการ</span>';
+    bindTileHeaderSorting(header);
+    updateTileSortIndicators();
 
     wrapper = document.createElement('div');
     wrapper.id = 'tileViewWrapper';
@@ -211,43 +314,40 @@
       if (!card.querySelector('.tile-work')) {
         var workDiv = document.createElement('div');
         workDiv.className = 'tile-work';
-        var workText = '';
-        var detailEl = card.querySelector('.detail-section');
-        if (detailEl) {
-          detailEl.querySelectorAll('div').forEach(function (d) {
-            if (!workText && d.textContent.includes('งาน:')) {
-              workText = d.textContent.replace('งาน:', '').trim();
-            }
-          });
-        }
-        if (!workText) workText = card.getAttribute('data-work') || '';
+        var workText = card.getAttribute('data-work') || '';
         workDiv.textContent = workText;
         workDiv.title = workText;
         card.insertBefore(workDiv, card.firstChild);
       }
 
-      /* col 2: item name */
+      /* col 2: department */
+      if (!card.querySelector('.tile-department')) {
+        var departmentDiv = document.createElement('div');
+        departmentDiv.className = 'tile-department';
+        var departmentText = card.getAttribute('data-department') || '';
+        departmentDiv.textContent = departmentText;
+        departmentDiv.title = departmentText;
+        card.appendChild(departmentDiv);
+      }
+
+      /* col 3: budget type */
+      if (!card.querySelector('.tile-budget-type')) {
+        var budgetTypeDiv = document.createElement('div');
+        budgetTypeDiv.className = 'tile-budget-type';
+        var budgetTypeText = card.getAttribute('data-budget-type') || '';
+        budgetTypeDiv.textContent = budgetTypeText;
+        budgetTypeDiv.title = budgetTypeText;
+        card.appendChild(budgetTypeDiv);
+      }
+
+      /* col 4: item name */
       if (!card.querySelector('.tile-item-name')) {
         var nameDiv = document.createElement('div');
         nameDiv.className = 'tile-item-name';
-        var itemText = '';
-        var detailEl2 = card.querySelector('.detail-section');
-        if (detailEl2) {
-          var divs = detailEl2.querySelectorAll('div');
-          divs.forEach(function (d) {
-            if (!itemText && d.textContent.includes('รายการ:')) {
-              itemText = d.textContent.replace('รายการ:', '').trim();
-            }
-          });
-          if (!itemText && divs.length) {
-            itemText = divs[0].textContent.replace(/^[^:]+:/, '').trim();
-          }
-        }
-        if (!itemText) itemText = card.getAttribute('data-item') || '';
+        var itemText = card.getAttribute('data-item') || '';
         nameDiv.textContent = itemText;
         nameDiv.title = itemText;
-        var body = card.querySelector('.card-body');
-        if (body) body.appendChild(nameDiv);
+        card.appendChild(nameDiv);
       }
 
       /* cols 3-5: amounts */
@@ -284,9 +384,13 @@
 
     if (mode === 'tile') {
       var wrapper = ensureWrapper();
+      sortFilteredItems();
       injectTileCols();
       container.classList.add('tile-view');
-      if (wrapper) wrapper.classList.add('visible');
+      if (wrapper) {
+        wrapper.classList.add('visible');
+        updateTileSortIndicators();
+      }
     } else {
       // ✅ ลบ injected elements ก่อน switch กลับ card
       cleanupTileInjections();
@@ -322,6 +426,19 @@
     else { var h = document.querySelector('.header'); if (h) h.appendChild(btn); }
   }
 
+  function ensureBtnAttached() {
+    var dashBtn = document.querySelector('[data-action="show-dashboard"]');
+    var btn = document.getElementById('viewToggleBtn') || _btn;
+    if (!btn) {
+      createBtn();
+      btn = _btn;
+    }
+    if (!btn) return;
+    if (dashBtn && dashBtn.parentNode && btn.parentNode !== dashBtn.parentNode) {
+      dashBtn.parentNode.insertBefore(btn, dashBtn.nextSibling);
+    }
+  }
+
   function wrapRenderCards() {
     if (typeof window.renderCards !== 'function' || window.renderCards.__vtWrapped) return;
     var orig = window.renderCards;
@@ -329,6 +446,7 @@
       // ✅ cleanup injections ก่อน re-render เสมอ
       cleanupTileInjections();
       orig.apply(this, arguments);
+      ensureBtnAttached();
       if (currentMode === 'tile') setTimeout(function () { applyMode('tile'); }, 0);
     };
     window.renderCards.__vtWrapped = true;
@@ -339,12 +457,16 @@
     var existing = document.getElementById('viewToggleBtn');
     if (existing && document.body.contains(existing)) {
       // ปุ่มมีอยู่แล้ว แค่ sync mode
+      _btn = existing;
       updateBtn(currentMode);
+      ensureBtnAttached();
+      wrapRenderCards();
       return;
     }
 
     createBtn();
     try { currentMode = localStorage.getItem(STORAGE_KEY) || 'card'; } catch (e) {}
+    ensureBtnAttached();
     updateBtn(currentMode);
     _btn.addEventListener('click', function () {
       applyMode(currentMode === 'card' ? 'tile' : 'card');
@@ -359,12 +481,15 @@
     var orig = window.displayData;
     window.displayData = function (payload) {
       var result = orig.apply(this, arguments);
-      // ✅ บั๊ก 1: ตรวจ role แล้ว show/hide transferBudgetBtn
+      try {
+        if (typeof window._initViewToggle === 'function') window._initViewToggle();
+      } catch (e) {}
+      // Keep transfer button visible for every role except viewer.
       try {
         var user = payload && payload.user;
         var transferBtn = document.getElementById('transferBudgetBtn');
         if (transferBtn && user) {
-          transferBtn.style.display = (user.role === 'admin') ? 'inline-flex' : 'none';
+          transferBtn.style.display = (user.role === 'viewer') ? 'none' : 'inline-flex';
         }
       } catch (e) {}
       return result;
@@ -384,6 +509,13 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', window._initViewToggle);
   else window._initViewToggle();
+
+  setTimeout(function () {
+    if (typeof window._initViewToggle === 'function') window._initViewToggle();
+  }, 400);
+  setTimeout(function () {
+    if (typeof window._initViewToggle === 'function') window._initViewToggle();
+  }, 1200);
 
 })();
 </script>

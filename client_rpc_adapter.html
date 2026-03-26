@@ -24,53 +24,99 @@
     var attempts = Math.max(1, opts.attempts || 4);
     var baseDelay = opts.baseDelay || 400;
     var maxDelay = opts.maxDelay || 5000;
-
-    // prefer wd_call / enqueueRpc if exist
-    if (typeof window.wd_call === 'function') {
-      try { return Promise.resolve(window.wd_call(fnName, args || [])); } catch(e) {}
-    }
-    if (typeof window.enqueueRpc === 'function') {
-      try {
-        return window.enqueueRpc(function(){
-          return new Promise(function(resolve, reject){
-            try {
-              if (!window.google || !google.script || !google.script.run) return reject(new Error('google.script.run not available'));
-              google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fnName].apply(null, args || []);
-            } catch(err){ reject(err); }
-          });
-        });
-      } catch(e){}
-    }
+    var timeoutMs = Math.max(3000, opts.timeoutMs || 15000);
 
     return new Promise(function(resolve, reject){
-      if (!(window.google && google.script && google.script.run)) {
-        return reject(new Error('No RPC mechanism available'));
-      }
       var attempt = 0;
-      function callOnce(){
-        attempt++;
+      var finished = false;
+      var timeoutId = null;
+
+      function settle(kind, value) {
+        if (finished) return;
+        finished = true;
+        try { if (timeoutId) clearTimeout(timeoutId); } catch (e) {}
+        if (kind === 'resolve') resolve(value);
+        else reject(value);
+      }
+
+      function armTimeout() {
+        try { if (timeoutId) clearTimeout(timeoutId); } catch (e) {}
+        timeoutId = setTimeout(function() {
+          settle('reject', new Error('RPC timeout: ' + fnName));
+        }, timeoutMs);
+      }
+
+      function callViaGoogle() {
+        if (!(window.google && google.script && google.script.run)) {
+          return false;
+        }
+        armTimeout();
         try {
-          google.script.run
-            .withSuccessHandler(function(res){ resolve(res); })
+          var runner = google.script.run
+            .withSuccessHandler(function(res){ settle('resolve', res); })
             .withFailureHandler(function(err){
               if (_isRateLimitError(err) && attempt < attempts) {
-                var expo = Math.min(maxDelay, baseDelay * Math.pow(2, attempt-1));
-                var jitter = expo * (0.5 + Math.random()*0.5);
-                console.warn('rpcWithRetry: retrying due to rate-limit in', Math.round(jitter),'ms', fnName, 'attempt', attempt);
+                var expo = Math.min(maxDelay, baseDelay * Math.pow(2, attempt - 1));
+                var jitter = expo * (0.5 + Math.random() * 0.5);
+                console.warn('rpcWithRetry: retrying due to rate-limit in', Math.round(jitter), 'ms', fnName, 'attempt', attempt);
                 _sleep(jitter).then(callOnce);
                 return;
               }
-              reject(err);
-            })[fnName].apply(null, args || []);
-        } catch(e){
-          if (_isRateLimitError(e) && attempt < attempts) {
-            var expo2 = Math.min(maxDelay, baseDelay * Math.pow(2, attempt-1));
-            var jitter2 = expo2 * (0.5 + Math.random()*0.5);
-            _sleep(jitter2).then(callOnce);
-            return;
+              settle('reject', err);
+            });
+          if (!runner || typeof runner[fnName] !== 'function') {
+            settle('reject', new Error('RPC method not found: ' + fnName));
+            return true;
           }
-          reject(e);
+          runner[fnName].apply(runner, args || []);
+          return true;
+        } catch (e) {
+          return false;
         }
+      }
+
+      function callViaFallbackQueue() {
+        if (typeof window.wd_call === 'function') {
+          armTimeout();
+          try {
+            Promise.resolve(window.wd_call(fnName, args || []))
+              .then(function(res) { settle('resolve', res); })
+              .catch(function(err) { settle('reject', err); });
+            return true;
+          } catch (e) {}
+        }
+        if (typeof window.enqueueRpc === 'function') {
+          armTimeout();
+          try {
+            Promise.resolve(window.enqueueRpc(function(){
+              return new Promise(function(resolveInner, rejectInner){
+                try {
+                  if (!window.google || !google.script || !google.script.run) return rejectInner(new Error('google.script.run not available'));
+                  var runner = google.script.run.withSuccessHandler(resolveInner).withFailureHandler(rejectInner);
+                  if (!runner || typeof runner[fnName] !== 'function') return rejectInner(new Error('RPC method not found: ' + fnName));
+                  runner[fnName].apply(runner, args || []);
+                } catch(err){ rejectInner(err); }
+              });
+            }))
+              .then(function(res) { settle('resolve', res); })
+              .catch(function(err) { settle('reject', err); });
+            return true;
+          } catch (e) {}
+        }
+        return false;
+      }
+
+      function callOnce(){
+        attempt++;
+        if (callViaGoogle()) return;
+        if (callViaFallbackQueue()) return;
+        if (_isRateLimitError(new Error('No RPC mechanism available')) && attempt < attempts) {
+          var expo2 = Math.min(maxDelay, baseDelay * Math.pow(2, attempt - 1));
+          var jitter2 = expo2 * (0.5 + Math.random() * 0.5);
+          _sleep(jitter2).then(callOnce);
+          return;
+        }
+        settle('reject', new Error('No RPC mechanism available'));
       }
       callOnce();
     });

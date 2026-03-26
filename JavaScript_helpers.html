@@ -30,30 +30,31 @@ window.validateExpenseForm = function(formData) {
   const { date, amount, description } = formData;
 
   if (!date || !date.trim()) {
-    errors.push('เธงเธฑเธเธ—เธตเนเธเธณเน€เธเนเธ');
+    errors.push('วันที่จำเป็น');
   } else {
     const selectedDate = new Date(date);
     const today = new Date();
+    selectedDate.setHours(0, 0, 0, 0);
     today.setHours(0, 0, 0, 0);
 
     if (isNaN(selectedDate.getTime())) {
-      errors.push('เธฃเธนเธเนเธเธเธงเธฑเธเธ—เธตเนเนเธกเนเธ–เธนเธเธ•เนเธญเธ');
+      errors.push('รูปแบบวันที่ไม่ถูกต้อง');
     } else if (selectedDate > today) {
-      errors.push('เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธเธฑเธเธ—เธถเธเธงเธฑเธเธ—เธตเนเนเธเธญเธเธฒเธเธ•เนเธ”เน');
+      errors.push('ไม่สามารถบันทึกวันที่ในอนาคตได้');
     } else if (selectedDate < new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000)) {
-      errors.push('เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธเธฑเธเธ—เธถเธเน€เธเธดเธเธเนเธฒเธขเน€เธเนเธฒเธเธงเนเธฒ 1 เธเธตเนเธ”เน');
+      errors.push('ไม่สามารถบันทึกเบิกจ่ายเก่ากว่า 1 ปีได้');
     }
   }
 
   const amountNum = parseFloat(amount);
   if (isNaN(amountNum) || amountNum <= 0) {
-    errors.push('เธเธณเธเธงเธเน€เธเธดเธเธ•เนเธญเธเธกเธฒเธเธเธงเนเธฒ 0');
+    errors.push('จำนวนเงินต้องมากกว่า 0');
   } else if (amountNum > 9999999.99) {
-    errors.push('เธเธณเธเธงเธเน€เธเธดเธเธกเธฒเธเน€เธเธดเธเนเธ (เธชเธนเธเธชเธธเธ” 9,999,999.99 เธเธฒเธ—)');
+    errors.push('จำนวนเงินมากเกินไป (สูงสุด 9,999,999.99 บาท)');
   }
 
   if (description && description.length > 500) {
-    errors.push('เธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธ•เนเธญเธเนเธกเนเน€เธเธดเธ 500 เธ•เธฑเธงเธญเธฑเธเธฉเธฃ');
+    errors.push('รายละเอียดต้องไม่เกิน 500 ตัวอักษร');
   }
 
   return {

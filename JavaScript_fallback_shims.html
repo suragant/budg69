@@ -1,0 +1,160 @@
+<script>
+(function(root, document){
+  'use strict';
+
+  if (!root || !document) return;
+  if (root._autoRestoreSlimInstalled) return;
+  root._autoRestoreSlimInstalled = true;
+
+  function isFn(value) {
+    return typeof value === 'function';
+  }
+
+  function installShowWorkExpenseTypesShim() {
+    if (isFn(root.showWorkExpenseTypes)) return;
+
+    root.showWorkExpenseTypes = function(workName) {
+      try {
+        if (isFn(root.renderWorkExpenseTypes)) {
+          var allItems = (root.State && Array.isArray(root.State.allItems)) ? root.State.allItems : [];
+          var filtered = allItems.filter(function(item) {
+            return String(item && item.work || '') === String(workName || '');
+          });
+          root.renderWorkExpenseTypes(workName, filtered);
+          return;
+        }
+
+        if (root.google && google.script && google.script.run && isFn(root.renderWorkExpenseTypes)) {
+          google.script.run
+            .withSuccessHandler(function(res) {
+              if (res && res.success && Array.isArray(res.detailedData)) {
+                root.renderWorkExpenseTypes(workName, res.detailedData);
+              }
+            })
+            .withFailureHandler(function(err) {
+              console.warn('showWorkExpenseTypes shim failed', err);
+            })
+            .getWorkDetails(workName);
+        }
+      } catch (e) {
+        console.warn('installShowWorkExpenseTypesShim error', e);
+      }
+    };
+  }
+
+  function installSafeShowAlertsShim() {
+    if (isFn(root.safeShowAlerts)) return;
+
+    root.safeShowAlerts = function() {
+      try {
+        if (isFn(root.showAlerts)) {
+          return root.showAlerts.apply(root, arguments);
+        }
+        if (isFn(root.openAlertsModal)) {
+          return root.openAlertsModal.apply(root, arguments);
+        }
+      } catch (e) {
+        console.warn('safeShowAlerts shim error', e);
+      }
+    };
+  }
+
+  function bindAlertButtons() {
+    try {
+      var selectors = '[data-action="show-alerts"], #alertBtn, .btn-alert, button.show-alerts, [data-role="alerts"]';
+      Array.prototype.forEach.call(document.querySelectorAll(selectors), function(el) {
+        if (!el || el._safeAlertBound) return;
+        el._safeAlertBound = true;
+        el.addEventListener('click', function(evt) {
+          try {
+            evt.preventDefault();
+            evt.stopPropagation();
+          } catch (e) {}
+          if (isFn(root.safeShowAlerts)) root.safeShowAlerts();
+        }, { passive: false });
+      });
+    } catch (e) {
+      console.warn('bindAlertButtons failed', e);
+    }
+  }
+
+  function isSupportActive() {
+    try {
+      if (root._supportMode === true) return true;
+      var main = document.querySelector('.container');
+      return !!(main && main.getAttribute && main.getAttribute('data-support-active') === '1');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function hasMainContentRendered() {
+    try {
+      var container = document.getElementById('budgetContainer');
+      var section = document.getElementById('searchFilterSection');
+      if (container && container.children && container.children.length > 0) return true;
+      if (section && section.style.display && section.style.display !== 'none') return true;
+      if (root.State && Array.isArray(root.State.allItems) && root.State.allItems.length > 0) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function ensureMainAppReady() {
+    try {
+      if (isSupportActive()) return;
+      if (hasMainContentRendered()) return;
+      if (typeof root._waitForGasAndLoad === 'function') {
+        root._appInitialized = false;
+        root._waitForGasAndLoad();
+        return;
+      }
+      if (typeof root.loadData === 'function') {
+        root.loadData();
+      }
+    } catch (e) {
+      console.warn('ensureMainAppReady failed', e);
+    }
+  }
+
+  function init() {
+    installShowWorkExpenseTypesShim();
+    installSafeShowAlertsShim();
+    bindAlertButtons();
+    setTimeout(ensureMainAppReady, 300);
+    setTimeout(ensureMainAppReady, 1200);
+    setTimeout(ensureMainAppReady, 2500);
+  }
+
+  function scheduleFallbackBootstrap() {
+    setTimeout(init, 0);
+    setTimeout(ensureMainAppReady, 400);
+    setTimeout(ensureMainAppReady, 1200);
+    setTimeout(ensureMainAppReady, 2500);
+    setTimeout(function() {
+      try {
+        if (typeof root.ensureBudgetCoreBoot === 'function') {
+          root.ensureBudgetCoreBoot();
+        } else {
+          ensureMainAppReady();
+        }
+      } catch (e) {
+        console.warn('scheduleFallbackBootstrap failed', e);
+      }
+    }, 700);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+  scheduleFallbackBootstrap();
+
+  root._autoRestore = root._autoRestore || {};
+  root._autoRestore.installShowWorkExpenseTypesShim = installShowWorkExpenseTypesShim;
+  root._autoRestore.installSafeShowAlertsShim = installSafeShowAlertsShim;
+  root._autoRestore.bindAlertButtons = bindAlertButtons;
+  root._autoRestore.ensureMainAppReady = ensureMainAppReady;
+  root._autoRestore.scheduleFallbackBootstrap = scheduleFallbackBootstrap;
+})(window, document);
+</script>

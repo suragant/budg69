@@ -1,0 +1,91 @@
+<script>
+(function(window, document){
+  'use strict';
+
+  if (!window || !document) return;
+  if (window._wd_card_export_hider_installed) return;
+  window._wd_card_export_hider_installed = true;
+
+  var HIDDEN_CLASS = 'wd-hidden-card-export-btn';
+
+  function textOf(el) {
+    try { return (el.innerText || el.textContent || '').toString().trim().toLowerCase(); }
+    catch (e) { return ''; }
+  }
+
+  function isExportLike(el) {
+    if (!el) return false;
+    try {
+      var action = ((el.getAttribute && el.getAttribute('data-action')) || '').toLowerCase();
+      var text = textOf(el);
+      return action.indexOf('export') !== -1 || text.indexOf('export') !== -1 || text.indexOf('pdf') !== -1 || text.indexOf('ส่งออก') !== -1;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function shouldHide(el) {
+    if (!el || !el.closest) return false;
+    if (el.id === 'dashboardExportBtn') return false;
+    if (el.closest('#dashboardModal') || el.closest('#workDetailModal')) return false;
+    return !!el.closest('.budget-card, .card');
+  }
+
+  function hideCardExports(root) {
+    try {
+      var list = root && root.querySelectorAll ? root.querySelectorAll('button, a, .btn') : [];
+      Array.prototype.forEach.call(list, function(el) {
+        if (el._wdHiddenByCardExportPatch) return;
+        if (!isExportLike(el)) return;
+        if (!shouldHide(el)) return;
+        el.style.display = 'none';
+        el.style.visibility = 'hidden';
+        el.classList.add(HIDDEN_CLASS);
+        el._wdHiddenByCardExportPatch = true;
+      });
+    } catch (e) {
+      console.warn('hideCardExports failed', e);
+    }
+  }
+
+  function installObserver() {
+    var container = document.getElementById('budgetContainer');
+    if (!container || container._wdCardExportObserver) return;
+
+    hideCardExports(container);
+
+    var observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        Array.prototype.forEach.call(mutation.addedNodes || [], function(node) {
+          if (node && node.nodeType === 1) hideCardExports(node);
+        });
+      });
+    });
+
+    observer.observe(container, { childList: true, subtree: true });
+    container._wdCardExportObserver = observer;
+  }
+
+  window._wd_restore_card_export_buttons = function() {
+    try {
+      Array.prototype.forEach.call(document.querySelectorAll('.' + HIDDEN_CLASS), function(el) {
+        el.style.display = '';
+        el.style.visibility = '';
+        el.classList.remove(HIDDEN_CLASS);
+        delete el._wdHiddenByCardExportPatch;
+      });
+    } catch (e) {}
+  };
+
+  function init() {
+    installObserver();
+    setTimeout(installObserver, 400);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})(window, document);
+</script>
