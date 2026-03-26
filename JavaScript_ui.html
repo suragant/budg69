@@ -1,4 +1,4 @@
-<script>
+﻿<script>
 (function(window, document){
   'use strict';
 
@@ -10,7 +10,8 @@
     filteredItems: [],
     budgetAlerts: [],
     user: null,
-    selectedItem: null
+    selectedItem: null,
+    dashboardData: []
   };
 
   function escapeHtmlSafe(value) {
@@ -64,7 +65,7 @@
   function setHeaderUser(user) {
     var userEmail = document.getElementById('userEmail');
     if (!userEmail) return;
-    var txt = (user && user.email) ? user.email : 'ไม่พบข้อมูลผู้ใช้';
+    var txt = (user && user.email) ? user.email : '\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e1c\u0e39\u0e49\u0e43\u0e0a\u0e49';
     if (user && user.department) txt += ' | ' + user.department;
     if (typeof window.setElementText === 'function') window.setElementText(userEmail, txt);
     else userEmail.textContent = txt;
@@ -78,7 +79,7 @@
     var warnings = (items || []).filter(function(item){ return usagePercent(item) >= 80; }).length;
 
     if (resultCount) {
-      var message = 'แสดง ' + count.toLocaleString('th-TH') + ' รายการ';
+      var message = '\u0e41\u0e2a\u0e14\u0e07 ' + count.toLocaleString('th-TH') + ' \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23';
       if (typeof window.setElementText === 'function') window.setElementText(resultCount, message);
       else resultCount.textContent = message;
     }
@@ -87,18 +88,45 @@
     if (warningCount) warningCount.textContent = String(warnings);
   }
 
+  function updateAlertBadge(alerts) {
+    var badge = document.getElementById('alertBadge');
+    var countEl = document.getElementById('alertCount');
+    var btn = document.getElementById('alertsButton');
+    var count = Array.isArray(alerts) ? alerts.length : 0;
+
+    if (badge) {
+      badge.style.display = 'inline-flex';
+      badge.style.alignItems = 'center';
+    }
+    if (btn) {
+      btn.setAttribute('aria-pressed', count > 0 ? 'true' : 'false');
+    }
+    if (countEl) {
+      countEl.textContent = String(count);
+      countEl.style.display = count > 0 ? 'flex' : 'none';
+    }
+  }
+
   function createBudgetCard(item) {
     item = item || {};
     var percent = usagePercent(item);
     var color = progressColor(percent);
-    var itemId = escapeHtmlSafe(item.itemId || '');
-    var work = escapeHtmlSafe(item.work || '-');
+    var rawItemId = String(item.itemId || '');
+    var rawWork = String(item.work || '-');
+    var itemId = escapeHtmlSafe(rawItemId);
+    var work = escapeHtmlSafe(rawWork);
     var budgetType = escapeHtmlSafe(item.budgetType || '-');
     var itemName = escapeHtmlSafe(item.item || '-');
     var department = escapeHtmlSafe(item.department || '-');
 
     return ''
-      + '<article class="budget-card" data-item-id="' + itemId + '" data-work="' + work + '">'
+      + '<article class="budget-card"'
+      + ' data-item-id="' + itemId + '"'
+      + ' data-work="' + work + '"'
+      + ' data-item="' + itemName + '"'
+      + ' data-department="' + department + '"'
+      + ' data-budget-type="' + budgetType + '"'
+      + '>'
       + '  <div class="card-header">'
       + '    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'
       + '      <div>'
@@ -110,21 +138,20 @@
       + '  </div>'
       + '  <div class="card-body">'
       + '    <div class="detail-section">'
-      + '      <div><strong>หน่วยงาน:</strong> ' + department + '</div>'
-      + '      <div><strong>งาน:</strong> ' + work + '</div>'
-      + '      <div><strong>ประเภทงบ:</strong> ' + budgetType + '</div>'
+      + '      <div><strong>\u0e2b\u0e19\u0e48\u0e27\u0e22\u0e07\u0e32\u0e19:</strong> ' + department + '</div>'
+      + '      <div><strong>\u0e07\u0e32\u0e19:</strong> ' + work + '</div>'
+      + '      <div><strong>\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17\u0e07\u0e1a:</strong> ' + budgetType + '</div>'
       + '    </div>'
       + '    <div class="budget-summary">'
-      + '      <div class="summary-row"><span>งบประมาณ</span><span class="amount-budget">' + fmtCurrency(item.budget) + '</span></div>'
-      + '      <div class="summary-row"><span>เบิกจ่าย</span><span class="amount-used">' + fmtCurrency(item.used) + '</span></div>'
-      + '      <div class="summary-row"><span>คงเหลือ</span><span class="amount-remaining">' + fmtCurrency(item.remaining) + '</span></div>'
+      + '      <div class="summary-row"><span>\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13</span><span class="amount-budget">' + fmtCurrency(item.budget) + '</span></div>'
+      + '      <div class="summary-row"><span>\u0e40\u0e1a\u0e34\u0e01\u0e08\u0e48\u0e32\u0e22</span><span class="amount-used">' + fmtCurrency(item.used) + '</span></div>'
+      + '      <div class="summary-row"><span>\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d</span><span class="amount-remaining">' + fmtCurrency(item.remaining) + '</span></div>'
       + '      <div class="progress-bar"><div class="progress-fill" style="width:' + percent.toFixed(1) + '%;background:' + color + ';"></div></div>'
       + '    </div>'
       + '  </div>'
       + '  <div class="card-actions">'
-      + '    <button class="btn btn-primary record-btn" data-action="open-expense" data-id="' + itemId + '">บันทึก</button>'
-      + '    <button class="btn btn-secondary" data-action="view-history" data-id="' + itemId + '">ประวัติ</button>'
-      + '    <button class="btn btn-secondary" data-action="open-work-detail" data-work="' + work + '">รายละเอียดงาน</button>'
+      + '    <button class="btn btn-primary record-btn" data-action="open-expense" data-id="' + itemId + '">\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01</button>'
+      + '    <button class="btn btn-secondary" data-action="view-history" data-id="' + itemId + '">\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34</button>'
       + '  </div>'
       + '</article>';
   }
@@ -137,7 +164,7 @@
     container.style.display = 'grid';
 
     if (!rows.length) {
-      container.innerHTML = '<div style="padding:24px;color:#666;background:#fff;border-radius:12px;">ไม่พบรายการที่ตรงกับตัวกรอง</div>';
+      container.innerHTML = '<div style="padding:24px;color:#666;background:#fff;border-radius:12px;">\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e17\u0e35\u0e48\u0e15\u0e23\u0e07\u0e01\u0e31\u0e1a\u0e15\u0e31\u0e27\u0e01\u0e23\u0e2d\u0e07</div>';
       renderFilterSummary([]);
       return;
     }
@@ -169,7 +196,7 @@
   function openExpense(itemId) {
     var item = findItemById(itemId);
     if (!item) {
-      setError('ไม่พบรายการสำหรับเปิดฟอร์มเบิกจ่าย');
+      setError('\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e40\u0e1b\u0e34\u0e14\u0e1f\u0e2d\u0e23\u0e4c\u0e21\u0e40\u0e1a\u0e34\u0e01\u0e08\u0e48\u0e32\u0e22');
       return false;
     }
 
@@ -177,7 +204,7 @@
     ensureExpenseHiddenItemId().value = item.itemId || '';
     var modalDetails = document.getElementById('modalDetails');
     if (modalDetails) {
-      modalDetails.innerHTML = '<strong>' + escapeHtmlSafe(item.item || item.itemId) + '</strong><br>คงเหลือ ' + fmtCurrency(item.remaining) + ' บาท';
+      modalDetails.innerHTML = '<strong>' + escapeHtmlSafe(item.item || item.itemId) + '</strong><br>\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d ' + fmtCurrency(item.remaining) + ' \u0e1a\u0e32\u0e17';
     }
 
     var dateInput = document.getElementById('expenseDate');
@@ -197,7 +224,7 @@
 
     var rows = Array.isArray(history) ? history : [];
     if (!rows.length) {
-      container.innerHTML = '<div style="padding:12px;color:#666;">ไม่พบประวัติรายการ</div>';
+      container.innerHTML = '<div style="padding:12px;color:#666;">\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</div>';
       return;
     }
 
@@ -210,17 +237,17 @@
         + '<div class="history-item" style="padding:12px;border:1px solid #eee;border-radius:10px;margin-bottom:10px;background:#fff;">'
         + '  <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'
         + '    <div>'
-        + '      <div style="font-weight:700;">' + fmtCurrency(entry.amount) + ' บาท</div>'
+        + '      <div style="font-weight:700;">' + fmtCurrency(entry.amount) + ' \u0e1a\u0e32\u0e17</div>'
         + '      <div style="color:#666;font-size:13px;">' + escapeHtmlSafe(entry.expenseDate || entry.timestamp || '-') + ' | ' + escapeHtmlSafe(entry.user || '-') + '</div>'
         + '    </div>'
         + '    <div style="font-size:12px;font-weight:700;color:' + statusColor + ';">' + escapeHtmlSafe(entry.status || 'ACTIVE') + '</div>'
         + '  </div>'
         + '  <div style="margin-top:8px;color:#444;">' + escapeHtmlSafe(entry.description || '-') + '</div>'
-        + '  <div style="margin-top:8px;font-size:12px;color:#666;">คงเหลือหลังรายการ: ' + fmtCurrency(entry.newRemaining) + '</div>'
+        + '  <div style="margin-top:8px;font-size:12px;color:#666;">\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d\u0e2b\u0e25\u0e31\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23: ' + fmtCurrency(entry.newRemaining) + '</div>'
         + '  <div style="display:flex;gap:8px;margin-top:10px;">'
         + (canEdit && entry.status !== 'CANCELLED'
-            ? '<button type="button" class="btn btn-secondary" data-role="edit-expense" data-log-row="' + escapeHtmlSafe(entry.logRowIndex) + '">แก้ไข</button>'
-              + '<button type="button" class="btn btn-secondary" data-role="cancel-expense" data-log-row="' + escapeHtmlSafe(entry.logRowIndex) + '">ยกเลิก</button>'
+            ? '<button type="button" class="btn btn-secondary" data-role="edit-expense" data-log-row="' + escapeHtmlSafe(entry.logRowIndex) + '">\u0e41\u0e01\u0e49\u0e44\u0e02</button>'
+              + '<button type="button" class="btn btn-secondary" data-role="cancel-expense" data-log-row="' + escapeHtmlSafe(entry.logRowIndex) + '">\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01</button>'
             : '')
         + '  </div>'
         + '</div>';
@@ -242,11 +269,15 @@
 
     var onSuccess = function(history) {
       if (loading) loading.style.display = 'none';
-      showHistory(history || [], State.user && State.user.email);
+      if (typeof window.showHistory === 'function') {
+        window.showHistory(history || [], State.user && State.user.email);
+      } else {
+        showHistory(history || [], State.user && State.user.email);
+      }
     };
     var onFailure = function(err) {
       if (loading) loading.style.display = 'none';
-      if (container) container.innerHTML = '<div style="padding:12px;color:#b00020;">' + escapeHtmlSafe(err && err.message ? err.message : String(err || 'โหลดประวัติไม่สำเร็จ')) + '</div>';
+      if (container) container.innerHTML = '<div style="padding:12px;color:#b00020;">' + escapeHtmlSafe(err && err.message ? err.message : String(err || '\u0e42\u0e2b\u0e25\u0e14\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08')) + '</div>';
     };
 
     try {
@@ -275,71 +306,208 @@
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'dashboardModalTitle');
     modal.innerHTML = ''
-      + '<div class="modal-content" style="max-width:1100px;">'
+      + '<div class="modal-content" style="max-width:1280px;width:96vw;">'
       + '  <div class="modal-header"><h2 id="dashboardModalTitle">Dashboard</h2></div>'
       + '  <div id="dashboardContainer" style="padding:16px;"></div>'
       + '  <div class="modal-actions">'
-      + '    <button type="button" class="btn btn-secondary" data-action="close-modal" data-target="dashboardModal">ปิด</button>'
+      + '    <button type="button" class="btn btn-secondary" data-action="print-dashboard">\u0e1e\u0e34\u0e21\u0e1e\u0e4c</button>'
+      + '    <button type="button" class="btn btn-primary" id="dashboardExportBtn" data-action="export-dashboard">Export PDF</button>'
+      + '    <button type="button" class="btn btn-secondary" data-action="close-modal" data-target="dashboardModal">\u0e1b\u0e34\u0e14</button>'
       + '  </div>'
       + '</div>';
     document.body.appendChild(modal);
     return modal;
   }
 
-  function renderDashboard(payload) {
+  function destroyChartIfExists(chartId) {
+    try {
+      if (!(window.Chart && typeof window.Chart.getChart === 'function')) return;
+      var existing = window.Chart.getChart(chartId);
+      if (existing && typeof existing.destroy === 'function') existing.destroy();
+    } catch (e) {
+      console.warn('destroyChartIfExists failed', chartId, e);
+    }
+  }
+
+    function renderDashboardCharts(data, totals) {
+    if (!(window.Chart && Array.isArray(data) && data.length)) return;
+    var budgetCanvas = document.getElementById('dashboardBudgetChart');
+    var topWorksCanvas = document.getElementById('dashboardTopWorksChart');
+    if (!budgetCanvas || !topWorksCanvas) return;
+    destroyChartIfExists('dashboardBudgetChart');
+    destroyChartIfExists('dashboardTopWorksChart');
+    var pieRows = data.slice().sort(function(a, b) {
+      return Number(b.totalBudget || 0) - Number(a.totalBudget || 0);
+    }).slice(0, 7);
+    var compareRows = data.slice().sort(function(a, b) {
+      return Number(b.totalBudget || 0) - Number(a.totalBudget || 0);
+    }).slice(0, 6);
+    var palette = ['#5C6EE5', '#7A46A3', '#F08CF4', '#4DA3FF', '#41D97B', '#FF7096', '#FFB74D'];
+    new window.Chart(budgetCanvas, {
+      type: 'doughnut',
+      data: {
+        labels: pieRows.map(function(row) { return row.work || '-'; }),
+        datasets: [{
+          data: pieRows.map(function(row) { return Number(row.totalBudget || 0); }),
+          backgroundColor: pieRows.map(function(_, index) { return palette[index % palette.length]; }),
+          borderWidth: 1
+        }]
+      },
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '52%',
+        plugins: {
+          title: { display: true, text: '\u0e2a\u0e31\u0e14\u0e2a\u0e48\u0e27\u0e19\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13\u0e15\u0e32\u0e21\u0e07\u0e32\u0e19' },
+          legend: { position: 'bottom' }
+        }
+      }
+    });
+    new window.Chart(topWorksCanvas, {
+      type: 'bar',
+      data: {
+        labels: compareRows.map(function(row) { return row.work || '-'; }),
+        datasets: [{
+          label: '\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13',
+          data: compareRows.map(function(row) { return Number(row.totalBudget || 0); }),
+          backgroundColor: '#7BC67B',
+          borderRadius: 4
+        }, {
+          label: '\u0e40\u0e1a\u0e34\u0e01\u0e08\u0e48\u0e32\u0e22',
+          data: compareRows.map(function(row) { return Number(row.totalUsed || 0); }),
+          backgroundColor: '#FFB74D',
+          borderRadius: 4,
+          minBarLength: 4
+        }, {
+          label: '\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d',
+          data: compareRows.map(function(row) { return Number(row.totalRemaining || 0); }),
+          backgroundColor: '#64B5F6',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: { display: true, text: '\u0e40\u0e1b\u0e23\u0e35\u0e22\u0e1a\u0e40\u0e17\u0e35\u0e22\u0e1a\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e07\u0e1a' },
+          legend: { display: true, position: 'top' }
+        },
+        scales: {
+          x: {
+            ticks: {
+              maxRotation: 0,
+              minRotation: 0,
+              autoSkip: false,
+              callback: function(value) {
+                var label = this.getLabelForValue(value);
+                if (!label) return '';
+                return String(label).length > 18 ? String(label).slice(0, 18) + '...' : label;
+              }
+            }
+          },
+          y: {
+            ticks: {
+              callback: function(value) {
+                try { return Number(value).toLocaleString('th-TH') + ' B'; } catch (e) { return value; }
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+    function renderDashboard(payload) {
     var container = ensureDashboardModal().querySelector('#dashboardContainer');
     if (!container) return;
-
-    var data = payload && payload.data ? payload.data : [];
+    var data = [];
+    if (payload && Array.isArray(payload.data)) data = payload.data;
+    else if (payload && payload.data && Array.isArray(payload.data.data)) data = payload.data.data;
+    else if (payload && Array.isArray(payload.items)) data = payload.items;
     if (!Array.isArray(data) || !data.length) {
-      container.innerHTML = '<div style="color:#666;">ไม่พบข้อมูล Dashboard</div>';
+      container.innerHTML = '<div style="color:#666;">\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25 Dashboard</div>';
       return;
     }
-
+    State.dashboardData = data.slice();
     var totalBudget = 0;
     var totalUsed = 0;
+    var totalTransferIn = 0;
+    var totalTransferOut = 0;
     var totalRemaining = 0;
     data.forEach(function(row){
       totalBudget += Number(row.totalBudget || 0);
       totalUsed += Number(row.totalUsed || 0);
+      totalTransferIn += Number(row.totalTransferIn || 0);
+      totalTransferOut += Number(row.totalTransferOut || 0);
       totalRemaining += Number(row.totalRemaining || 0);
     });
-
-    var summary = ''
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;">'
-      + '  <div class="budget-card"><div class="card-body"><div style="color:#666;">งบรวม</div><div style="font-size:24px;font-weight:700;color:#2e7d32;">' + fmtCurrency(totalBudget) + '</div></div></div>'
-      + '  <div class="budget-card"><div class="card-body"><div style="color:#666;">ใช้ไป</div><div style="font-size:24px;font-weight:700;color:#ef6c00;">' + fmtCurrency(totalUsed) + '</div></div></div>'
-      + '  <div class="budget-card"><div class="card-body"><div style="color:#666;">คงเหลือ</div><div style="font-size:24px;font-weight:700;color:#1565c0;">' + fmtCurrency(totalRemaining) + '</div></div></div>'
+    var totals = {
+      totalBudget: totalBudget,
+      totalUsed: totalUsed,
+      totalTransferIn: totalTransferIn,
+      totalTransferOut: totalTransferOut,
+      totalRemaining: totalRemaining
+    };
+    var userText = escapeHtmlSafe((document.getElementById('userEmail') || {}).textContent || '');
+    var reportHeader = ''
+      + '<div style="text-align:center;margin-bottom:18px;">'
+      + '  <div style="font-size:16px;font-weight:700;color:#5C6EE5;">\u0e23\u0e30\u0e1a\u0e1a\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13</div>'
+      + '  <div style="font-size:13px;color:#444;">\u0e23\u0e32\u0e22\u0e07\u0e32\u0e19 Dashboard \u2022 \u0e1e\u0e34\u0e21\u0e1e\u0e4c\u0e40\u0e21\u0e37\u0e48\u0e2d: ' + escapeHtmlSafe(new Date().toLocaleString('th-TH')) + '</div>'
+      + '  <div style="font-size:13px;color:#444;">\u0e1c\u0e39\u0e49\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19 ' + userText + '</div>'
       + '</div>';
-
+    var charts = ''
+      + '<div style="display:grid;grid-template-columns:minmax(340px,1fr) minmax(460px,1.25fr);gap:22px;align-items:start;margin-bottom:22px;">'
+      + '  <div>'
+      + '    <div class="chart-title" style="font-weight:700;margin-bottom:8px;text-align:center;">\u0e2a\u0e31\u0e14\u0e2a\u0e48\u0e27\u0e19\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13\u0e15\u0e32\u0e21\u0e07\u0e32\u0e19</div>'
+      + '    <div class="chart-container" style="height:300px;position:relative;">'
+      + '      <canvas id="dashboardBudgetChart" data-chart-title="\u0e2a\u0e31\u0e14\u0e2a\u0e48\u0e27\u0e19\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13\u0e15\u0e32\u0e21\u0e07\u0e32\u0e19" aria-label="\u0e2a\u0e31\u0e14\u0e2a\u0e48\u0e27\u0e19\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13\u0e15\u0e32\u0e21\u0e07\u0e32\u0e19"></canvas>'
+      + '    </div>'
+      + '  </div>'
+      + '  <div>'
+      + '    <div class="chart-title" style="font-weight:700;margin-bottom:8px;text-align:center;">\u0e40\u0e1b\u0e23\u0e35\u0e22\u0e1a\u0e40\u0e17\u0e35\u0e22\u0e1a\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e07\u0e1a</div>'
+      + '    <div class="chart-container" style="height:300px;position:relative;">'
+      + '      <canvas id="dashboardTopWorksChart" data-chart-title="\u0e40\u0e1b\u0e23\u0e35\u0e22\u0e1a\u0e40\u0e17\u0e35\u0e22\u0e1a\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e07\u0e1a" aria-label="\u0e40\u0e1b\u0e23\u0e35\u0e22\u0e1a\u0e40\u0e17\u0e35\u0e22\u0e1a\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e07\u0e1a"></canvas>'
+      + '    </div>'
+      + '  </div>'
+      + '</div>';
     var rows = data.map(function(row){
+      var percent = Number(row.totalBudget || 0) > 0 ? (Number(row.totalUsed || 0) / Number(row.totalBudget || 0)) * 100 : 0;
+      var workName = escapeHtmlSafe(row.work || '-');
       return '<tr>'
-        + '<td>' + escapeHtmlSafe(row.work || '-') + '</td>'
+        + '<td>' + workName + '</td>'
+        + '<td style="text-align:center;">' + Number(row.items || 0).toLocaleString('th-TH') + ' \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</td>'
         + '<td style="text-align:right;">' + fmtCurrency(row.totalBudget) + '</td>'
         + '<td style="text-align:right;">' + fmtCurrency(row.totalUsed) + '</td>'
+        + '<td style="text-align:right;color:#2e7d32;">' + fmtCurrency(row.totalTransferIn) + '</td>'
+        + '<td style="text-align:right;color:#d84315;">' + fmtCurrency(row.totalTransferOut) + '</td>'
         + '<td style="text-align:right;">' + fmtCurrency(row.totalRemaining) + '</td>'
-        + '<td style="text-align:right;">' + Number(row.items || 0).toLocaleString('th-TH') + '</td>'
+        + '<td style="text-align:right;">' + percent.toFixed(1) + '%</td>'
+        + '<td style="text-align:center;"><button type="button" class="btn btn-secondary" data-action="open-work-detail" data-work="' + workName + '">\u0e23\u0e32\u0e22\u0e25\u0e30\u0e40\u0e2d\u0e35\u0e22\u0e14</button></td>'
         + '</tr>';
     }).join('');
-
-    container.innerHTML = summary
+    container.innerHTML = reportHeader
+      + charts
       + '<div class="table-wrapper">'
       + '  <table id="dashboardSummaryTable" style="width:100%;border-collapse:collapse;">'
-      + '    <thead><tr><th style="text-align:left;">งาน</th><th style="text-align:right;">งบ</th><th style="text-align:right;">ใช้ไป</th><th style="text-align:right;">คงเหลือ</th><th style="text-align:right;">รายการ</th></tr></thead>'
+      + '    <thead><tr><th style="text-align:left;">\u0e07\u0e32\u0e19</th><th style="text-align:center;">\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</th><th style="text-align:right;">\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13</th><th style="text-align:right;">\u0e40\u0e1a\u0e34\u0e01\u0e08\u0e48\u0e32\u0e22</th><th style="text-align:right;">\u0e42\u0e2d\u0e19\u0e40\u0e02\u0e49\u0e32</th><th style="text-align:right;">\u0e42\u0e2d\u0e19\u0e2d\u0e2d\u0e01</th><th style="text-align:right;">\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d</th><th style="text-align:right;">%</th><th style="text-align:center;">\u0e23\u0e32\u0e22\u0e25\u0e30\u0e40\u0e2d\u0e35\u0e22\u0e14</th></tr></thead>'
       + '    <tbody>' + rows + '</tbody>'
+      + '    <tfoot><tr><td style="font-weight:700;">\u0e23\u0e27\u0e21</td><td style="text-align:center;font-weight:700;">' + data.length.toLocaleString('th-TH') + ' \u0e07\u0e32\u0e19</td><td style="text-align:right;font-weight:700;">' + fmtCurrency(totalBudget) + '</td><td style="text-align:right;font-weight:700;">' + fmtCurrency(totalUsed) + '</td><td style="text-align:right;font-weight:700;color:#2e7d32;">' + fmtCurrency(totalTransferIn) + '</td><td style="text-align:right;font-weight:700;color:#d84315;">' + fmtCurrency(totalTransferOut) + '</td><td style="text-align:right;font-weight:700;">' + fmtCurrency(totalRemaining) + '</td><td style="text-align:right;font-weight:700;">' + (totalBudget > 0 ? ((totalUsed / totalBudget) * 100).toFixed(1) : '0.0') + '%</td><td></td></tr></tfoot>'
       + '  </table>'
       + '</div>';
+    setTimeout(function() {
+      renderDashboardCharts(data, totals);
+    }, 50);
   }
-
   function showDashboard() {
     var modal = ensureDashboardModal();
     var container = modal.querySelector('#dashboardContainer');
-    if (container) container.innerHTML = '<div style="color:#666;">กำลังโหลด Dashboard...</div>';
+    if (container) container.innerHTML = '<div style="color:#666;">\u0e01\u0e33\u0e25\u0e31\u0e07\u0e42\u0e2b\u0e25\u0e14 Dashboard...</div>';
     if (typeof window.openModal === 'function') window.openModal(modal);
 
     var onSuccess = function(res) { renderDashboard(res || {}); };
     var onFailure = function(err) {
-      if (container) container.innerHTML = '<div style="color:#b00020;">' + escapeHtmlSafe(err && err.message ? err.message : String(err || 'โหลด Dashboard ไม่สำเร็จ')) + '</div>';
+      if (container) container.innerHTML = '<div style="color:#b00020;">' + escapeHtmlSafe(err && err.message ? err.message : String(err || '\u0e42\u0e2b\u0e25\u0e14 Dashboard \u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08')) + '</div>';
     };
 
     try {
@@ -355,6 +523,96 @@
     }
   }
 
+  function renderWorkExpenseTypes(workName, detailedData) {
+    var container = document.getElementById('workDetailContent');
+    if (!container) return;
+
+    var rows = Array.isArray(detailedData) ? detailedData : [];
+    if (!rows.length) {
+      container.innerHTML = '<div style="padding:12px;color:#666;">\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e23\u0e32\u0e22\u0e25\u0e30\u0e40\u0e2d\u0e35\u0e22\u0e14\u0e07\u0e32\u0e19</div>';
+      return;
+    }
+
+    var titleEl = document.getElementById('workDetailTitle');
+    if (titleEl) titleEl.textContent = '\u0e23\u0e32\u0e22\u0e25\u0e30\u0e40\u0e2d\u0e35\u0e22\u0e14\u0e07\u0e32\u0e19';
+
+    var normalizedRows = rows.slice().sort(function(a, b) {
+      var left = [
+        a.category || '',
+        a.expenseType || '',
+        a.item || ''
+      ].join('|');
+      var right = [
+        b.category || '',
+        b.expenseType || '',
+        b.item || ''
+      ].join('|');
+      return left.localeCompare(right, 'th');
+    });
+
+    var totalBudget = 0;
+    var totalUsed = 0;
+    var totalTransferIn = 0;
+    var totalTransferOut = 0;
+    var totalRemaining = 0;
+    var lastCategory = null;
+    var lastExpenseType = null;
+
+    var htmlRows = normalizedRows.map(function(row) {
+      totalBudget += Number(row.budget || 0);
+      totalUsed += Number(row.used || 0);
+      totalTransferIn += Number(row.transferIn || 0);
+      totalTransferOut += Number(row.transferOut || 0);
+      totalRemaining += Number(row.remaining || 0);
+
+      var currentCategory = String(row.category || '-');
+      var currentExpenseType = String(row.expenseType || '-');
+
+      var categoryCell = currentCategory !== lastCategory ? escapeHtmlSafe(currentCategory) : '';
+      var expenseTypeCell = (currentCategory !== lastCategory || currentExpenseType !== lastExpenseType)
+        ? escapeHtmlSafe(currentExpenseType)
+        : '';
+
+      lastCategory = currentCategory;
+      lastExpenseType = currentExpenseType;
+
+      return '<tr>'
+        + '<td>' + categoryCell + '</td>'
+        + '<td>' + expenseTypeCell + '</td>'
+        + '<td>' + escapeHtmlSafe(row.item || '-') + '</td>'
+        + '<td style="text-align:right;">' + fmtCurrency(row.budget) + '</td>'
+        + '<td style="text-align:right;">' + fmtCurrency(row.used) + '</td>'
+        + '<td style="text-align:right;color:#2e7d32;">' + fmtCurrency(row.transferIn) + '</td>'
+        + '<td style="text-align:right;color:#d84315;">' + fmtCurrency(row.transferOut) + '</td>'
+        + '<td style="text-align:right;">' + fmtCurrency(row.remaining) + '</td>'
+        + '</tr>';
+    }).join('');
+
+      container.innerHTML = ''
+        + '<div id="workDetailReport" style="background:#fff;padding:10px 12px 18px;">'
+        + '  <div style="text-align:center;margin-bottom:12px;">'
+        + '    <div style="font-size:22px;font-weight:700;">\u0e23\u0e32\u0e22\u0e25\u0e30\u0e40\u0e2d\u0e35\u0e22\u0e14\u0e07\u0e32\u0e19</div>'
+        + '    <div style="font-size:13px;color:#555;margin-top:2px;">\u0e1e\u0e34\u0e21\u0e1e\u0e4c\u0e40\u0e21\u0e37\u0e48\u0e2d: ' + escapeHtmlSafe(new Date().toLocaleString('th-TH')) + '</div>'
+        + '    <div style="font-size:13px;color:#555;">\u0e1c\u0e39\u0e49\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19: ' + escapeHtmlSafe((document.getElementById('userEmail') || {}).textContent || '') + '</div>'
+        + '  </div>'
+        + '  <div style="font-size:15px;font-weight:600;margin:0 0 10px 2px;">' + escapeHtmlSafe(workName || '-') + '</div>'
+        + '  <div class="table-wrapper">'
+        + '    <table id="workDetailSummaryTable" style="width:100%;border-collapse:collapse;background:#fff;table-layout:fixed;">'
+        + '      <thead><tr><th style="text-align:left;border:1px solid #d8d8d8;background:#f5f5f5;padding:10px 8px;width:13%;">\u0e2b\u0e21\u0e27\u0e14</th><th style="text-align:left;border:1px solid #d8d8d8;background:#f5f5f5;padding:10px 8px;width:13%;">\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17</th><th style="text-align:left;border:1px solid #d8d8d8;background:#f5f5f5;padding:10px 10px;width:28%;">\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</th><th style="text-align:right;border:1px solid #d8d8d8;background:#f5f5f5;padding:10px 8px;width:9%;">\u0e07\u0e1a</th><th style="text-align:right;border:1px solid #d8d8d8;background:#f5f5f5;padding:10px 8px;width:9%;">\u0e40\u0e1a\u0e34\u0e01\u0e08\u0e48\u0e32\u0e22</th><th style="text-align:right;border:1px solid #d8d8d8;background:#f5f5f5;padding:10px 8px;width:9%;">\u0e42\u0e2d\u0e19\u0e40\u0e02\u0e49\u0e32</th><th style="text-align:right;border:1px solid #d8d8d8;background:#f5f5f5;padding:10px 8px;width:9%;">\u0e42\u0e2d\u0e19\u0e2d\u0e2d\u0e01</th><th style="text-align:right;border:1px solid #d8d8d8;background:#f5f5f5;padding:10px 8px;width:10%;">\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d</th></tr></thead>'
+        + '      <tbody>' + htmlRows.replace(/<td>/g, '<td style="border:1px solid #d8d8d8;padding:10px 8px;vertical-align:top;word-break:break-word;">').replace(/<td style="text-align:right;([^"]*)">/g, '<td style="border:1px solid #d8d8d8;padding:10px 8px;vertical-align:top;text-align:right;white-space:nowrap;$1">') + '</tbody>'
+        + '    </table>'
+        + '  </div>'
+        + '  <div id="workDetailTotals" style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-top:12px;font-weight:700;">'
+        + '    <span style="color:#5C6EE5;">\u0e2a\u0e23\u0e38\u0e1b\u0e22\u0e2d\u0e14\u0e23\u0e27\u0e21</span>'
+        + '    <span style="color:#2e7d32;">\u0e07\u0e1a\u0e23\u0e27\u0e21: ' + fmtCurrency(totalBudget) + ' \u0e3f</span>'
+        + '    <span style="color:#ef6c00;">\u0e40\u0e1a\u0e34\u0e01\u0e08\u0e48\u0e32\u0e22: ' + fmtCurrency(totalUsed) + ' \u0e3f</span>'
+        + '    <span style="color:#2e7d32;">\u0e42\u0e2d\u0e19\u0e40\u0e02\u0e49\u0e32: ' + fmtCurrency(totalTransferIn) + ' \u0e3f</span>'
+        + '    <span style="color:#d84315;">\u0e42\u0e2d\u0e19\u0e2d\u0e2d\u0e01: ' + fmtCurrency(totalTransferOut) + ' \u0e3f</span>'
+        + '    <span style="color:#1e88e5;">\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d: ' + fmtCurrency(totalRemaining) + ' \u0e3f</span>'
+        + '  </div>'
+        + '</div>';
+  }
+
   window.setBudgetLoading = window.setBudgetLoading || setLoading;
   window.setBudgetError = window.setBudgetError || setError;
   window.createBudgetCard = window.createBudgetCard || createBudgetCard;
@@ -365,7 +623,7 @@
 
     if (!payload || payload.success === false) {
       setLoading(false);
-      setError(payload && payload.message ? payload.message : 'ไม่สามารถโหลดข้อมูลได้');
+      setError(payload && payload.message ? payload.message : 'เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เนเธซเธฅเธ”เธเนเธญเธกเธนเธฅเนเธ”เน');
       if (section) section.style.display = 'none';
       if (container) container.style.display = 'none';
       return;
@@ -377,6 +635,7 @@
     State.budgetAlerts = Array.isArray(payload.alerts) ? payload.alerts.slice() : (State.budgetAlerts || []);
 
     setHeaderUser(State.user);
+    updateAlertBadge(State.budgetAlerts);
     setError('');
     setLoading(false);
     if (section) section.style.display = 'block';
@@ -387,9 +646,12 @@
   window.showHistory = window.showHistory || showHistory;
   window.openHistory = window.openHistory || openHistory;
   window.showDashboard = window.showDashboard || showDashboard;
+  window.renderWorkExpenseTypes = window.renderWorkExpenseTypes || renderWorkExpenseTypes;
+  window.updateAlertBadge = window.updateAlertBadge || updateAlertBadge;
   window.showAlerts = window.showAlerts || function() {
     if (typeof window.openAlertsModal === 'function') return window.openAlertsModal();
-    if (typeof window.showCustomAlert === 'function') return window.showCustomAlert('info', 'แจ้งเตือน', 'ยังไม่มีระบบแสดงแจ้งเตือน');
+    if (typeof window.showCustomAlert === 'function') return window.showCustomAlert('info', 'เนเธเนเธเน€เธ•เธทเธญเธ', 'เธขเธฑเธเนเธกเนเธกเธตเธฃเธฐเธเธเนเธชเธ”เธเนเธเนเธเน€เธ•เธทเธญเธ');
   };
 })(window, document);
 </script>
+

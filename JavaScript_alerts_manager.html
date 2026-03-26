@@ -186,12 +186,6 @@
     _setOpening(true);
 
     try {
-      // If UI-level showAlerts is present and not currently showing, prefer that (but avoid recursion)
-      if (typeof window.showAlerts === 'function' && !window.__alerts_ui_showing) {
-        try { window.__alerts_ui_showing = true; window.showAlerts(); return; } catch(e){ console.warn('showAlerts threw, falling back to manager implementation', e); }
-        finally { /* manager remains opening until closeAlertsModal clears flag */ }
-      }
-
       var modal = ensureAlertsModal();
       if (!modal) {
         console.warn('openAlertsModal: cannot create modal');
@@ -256,13 +250,14 @@
       } else {
         if (container && container.innerHTML.trim() === '') container.innerHTML = '<div style="color:#666">ไม่สามารถเรียก server เพื่อโหลดแจ้งเตือนได้</div>';
       }
+      try { window.__alerts_ui_showing = true; } catch(_) {}
     } catch(e) {
       console.error('openAlertsModal unexpected error', e);
       // ensure flags cleared on error
       try { _setOpening(false); } catch(_) {}
       try { window.__alerts_ui_showing = false; } catch(_) {}
     } finally {
-      // keep manager opening flag until closeAlertsModal clears it (prevents reentry)
+      try { _setOpening(false); } catch(_) {}
     }
   }
 

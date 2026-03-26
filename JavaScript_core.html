@@ -26,13 +26,176 @@
           reject(new Error('google.script.run not available'));
           return;
         }
-        google.script.run
+        var runner = google.script.run
           .withSuccessHandler(resolve)
-          .withFailureHandler(reject)[fnName].apply(null, args);
+          .withFailureHandler(reject);
+        if (!runner || typeof runner[fnName] !== 'function') {
+          reject(new Error('RPC method not found: ' + fnName));
+          return;
+        }
+        runner[fnName].apply(runner, args);
       } catch (e) {
         reject(e);
       }
     });
+  }
+
+  function callServerDirect(fnName, args) {
+    args = Array.isArray(args) ? args : [];
+    return new Promise(function(resolve, reject){
+      try {
+        if (!(window.google && google.script && google.script.run)) {
+          reject(new Error('google.script.run not available'));
+          return;
+        }
+        var runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject);
+        if (!runner || typeof runner[fnName] !== 'function') {
+          reject(new Error('RPC method not found: ' + fnName));
+          return;
+        }
+        runner[fnName].apply(runner, args);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  window.__wd_record_dedupe = window.__wd_record_dedupe || { lastCalls: {}, ttl: 3000 };
+
+  function dedupeKey(itemId, amount, desc) {
+    return String(itemId || '') + '|' + String(amount || '') + '|' + String((desc || '').slice(0, 50));
+  }
+
+  function isDuplicateRecord(itemId, amount, desc) {
+    try {
+      var key = dedupeKey(itemId, amount, desc);
+      var now = Date.now();
+      var last = window.__wd_record_dedupe.lastCalls[key];
+      if (last && (now - last) < window.__wd_record_dedupe.ttl) return true;
+      window.__wd_record_dedupe.lastCalls[key] = now;
+      Object.keys(window.__wd_record_dedupe.lastCalls).forEach(function(k){
+        if (now - window.__wd_record_dedupe.lastCalls[k] > 60000) delete window.__wd_record_dedupe.lastCalls[k];
+      });
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function normalizeDateForServer(value) {
+    try {
+      if (!value) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+      var parsed = new Date(String(value));
+      if (isNaN(parsed.getTime())) return '';
+      var yyyy = parsed.getFullYear();
+      var mm = ('0' + (parsed.getMonth() + 1)).slice(-2);
+      var dd = ('0' + parsed.getDate()).slice(-2);
+      return yyyy + '-' + mm + '-' + dd;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function normalizeIdClientSide(id) {
+    try {
+      if (typeof window.clientNormalizeItemId === 'function') return window.clientNormalizeItemId(id);
+      return String(id == null ? '' : id).replace(/\u00A0/g, ' ').replace(/[\s\-_]+/g, ' ').trim();
+    } catch (e) {
+      return String(id || '');
+    }
+  }
+
+  function isSupportId(id) {
+    try {
+      var v = String(id || '').toUpperCase().trim();
+      if (!v) return false;
+      if (window._supportDefaultPrefix) {
+        var pref = String(window._supportDefaultPrefix).toUpperCase();
+        if (v.indexOf(pref + '-') === 0 || v.indexOf(pref) === 0) return true;
+      }
+      return /^SP\d+/i.test(v);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function refreshAfterSave(useSupportApi) {
+    try {
+      if (useSupportApi) {
+        if (typeof window.loadSupportItemsList === 'function') {
+          window.loadSupportItemsList();
+          return;
+        }
+      }
+      if (typeof window.loadData === 'function') {
+        window.loadData();
+        return;
+      }
+      if (typeof window.applyFilters === 'function') window.applyFilters();
+    } catch (e) {
+      console.warn('refreshAfterSave failed', e);
+    }
+  }
+
+  function recordExpense(itemId, amount, description, expenseDate) {
+    try {
+      var hidden = document.getElementById('expenseItemId');
+      if (hidden && hidden.value) itemId = hidden.value;
+
+      if (itemId && typeof itemId === 'object' && itemId.nodeType === 1) {
+        itemId = (itemId.getAttribute && (itemId.getAttribute('data-id') || itemId.getAttribute('data-item-id'))) || itemId.id || '';
+      }
+
+      var normalizedItemId = normalizeIdClientSide(itemId);
+      var normalizedDate = normalizeDateForServer(expenseDate || (document.getElementById('expenseDate') || {}).value || '');
+      var useSupportApi = isSupportId(normalizedItemId) || window._supportMode === true;
+
+      if (isDuplicateRecord(normalizedItemId, amount, description)) {
+        console.warn('duplicate record suppressed', normalizedItemId);
+        return Promise.resolve({ success: false, message: 'duplicate-suppressed' });
+      }
+
+      var fnName = useSupportApi ? 'recordSupportExpenseSupport' : 'recordExpense';
+      var args = useSupportApi
+        ? [normalizedItemId, amount, description, normalizedDate, 0]
+        : [normalizedItemId, amount, description, normalizedDate];
+
+      return callServer(fnName, args).then(function(res){
+        if (res && res.success) {
+          refreshAfterSave(useSupportApi);
+          if (typeof window.closeModal === 'function') window.closeModal('expenseModal');
+          if (typeof window.showCustomAlert === 'function') {
+            var successMessage = (res && res.message && String(res.message).trim())
+              ? String(res.message)
+              : '\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e40\u0e23\u0e35\u0e22\u0e1a\u0e23\u0e49\u0e2d\u0e22\u0e41\u0e25\u0e49\u0e27';
+            window.showCustomAlert(
+              'success',
+              '\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08',
+              successMessage
+            );
+          }
+          return res;
+        }
+
+        var message = (res && res.message) ? res.message : 'ไม่สามารถบันทึกรายการได้';
+        if (typeof window.showCustomAlert === 'function') {
+          window.showCustomAlert('error', 'บันทึกไม่สำเร็จ', message);
+        }
+        return res;
+      }).catch(function(err){
+        console.error('recordExpense failed', err);
+        if (typeof window.showCustomAlert === 'function') {
+          window.showCustomAlert('error', 'เกิดข้อผิดพลาด', String(err));
+        }
+        return { success: false, message: String(err) };
+      });
+    } catch (err) {
+      console.error('recordExpense wrapper error', err);
+      return Promise.resolve({ success: false, message: String(err) });
+    }
   }
 
   function applyFilters() {
@@ -91,21 +254,176 @@
   }
 
   function loadData() {
+    window.__budgetLastLoadStartedAt = Date.now();
     if (typeof window.setBudgetLoading === 'function') window.setBudgetLoading(true);
     if (typeof window.setBudgetError === 'function') window.setBudgetError('');
 
-    return callServer('getInitialData', [])
+    return callServerDirect('getInitialData', [])
+      .catch(function(primaryErr){
+        console.warn('Direct getInitialData failed, falling back', primaryErr);
+        return callServer('getInitialData', []);
+      })
       .then(function(res){
-        if (typeof window.displayData === 'function') window.displayData(res || {});
+        applyInitialPayload(res || {});
+        try {
+          if (typeof window.displayData === 'function') {
+            window.displayData(res || {});
+          }
+        } catch (renderErr) {
+          console.warn('displayData threw, applying fallback renderer', renderErr);
+          applyInitialPayload(res || {});
+        }
         return res;
       })
       .catch(function(err){
+        console.warn('loadData failed', err);
         if (typeof window.setBudgetLoading === 'function') window.setBudgetLoading(false);
         if (typeof window.setBudgetError === 'function') {
           window.setBudgetError(err && err.message ? err.message : String(err || 'โหลดข้อมูลไม่สำเร็จ'));
         }
         throw err;
       });
+  }
+
+  function applyInitialPayload(payload) {
+    var section = document.getElementById('searchFilterSection');
+    var container = document.getElementById('budgetContainer');
+    var userEmail = document.getElementById('userEmail');
+    var transferBtn = document.getElementById('transferBudgetBtn');
+    var skeleton = document.getElementById('skeletonSection');
+
+    if (!payload || payload.success === false) {
+      if (typeof window.setBudgetLoading === 'function') window.setBudgetLoading(false);
+      if (typeof window.setBudgetError === 'function') {
+        window.setBudgetError(payload && payload.message ? payload.message : 'โหลดข้อมูลไม่สำเร็จ');
+      }
+      if (section) section.style.display = 'none';
+      if (container) container.style.display = 'none';
+      return;
+    }
+
+    State.user = payload.user || State.user || null;
+    State.allItems = Array.isArray(payload.items) ? payload.items.slice() : [];
+    State.filteredItems = State.allItems.slice();
+    State.budgetAlerts = Array.isArray(payload.alerts) ? payload.alerts.slice() : [];
+
+    if (userEmail) {
+      var txt = (State.user && State.user.email) ? State.user.email : 'ไม่พบข้อมูลผู้ใช้';
+      if (State.user && State.user.department) txt += ' | ' + State.user.department;
+      if (typeof window.setElementText === 'function') window.setElementText(userEmail, txt);
+      else userEmail.textContent = txt;
+    }
+
+    if (transferBtn && State.user) {
+      transferBtn.style.display = (State.user.role === 'viewer') ? 'none' : 'inline-flex';
+    }
+    if (typeof window.updateAlertBadge === 'function') {
+      try { window.updateAlertBadge(State.budgetAlerts); } catch (e) {}
+    }
+
+    if (typeof window.setBudgetError === 'function') window.setBudgetError('');
+    if (typeof window.setBudgetLoading === 'function') window.setBudgetLoading(false);
+    if (skeleton && skeleton.classList) skeleton.classList.add('hidden');
+    if (section) section.style.display = 'block';
+    if (container) container.style.display = 'grid';
+
+    if (container) {
+      try {
+        if (State.filteredItems.length && typeof window.createBudgetCard === 'function') {
+          container.innerHTML = State.filteredItems.map(function(item) {
+            return window.createBudgetCard(item);
+          }).join('');
+        } else if (!State.filteredItems.length) {
+          container.innerHTML = '<div style="padding:24px;color:#666;background:#fff;border-radius:12px;">ไม่พบรายการที่ตรงกับตัวกรอง</div>';
+        }
+      } catch (e) {
+        console.warn('applyInitialPayload direct card render failed', e);
+      }
+    }
+
+    if (typeof window.renderCards === 'function') {
+      window.renderCards(State.filteredItems);
+    }
+  }
+
+  function hasRenderedMainData() {
+    try {
+      if (window._supportMode === true) return true;
+      var section = document.getElementById('searchFilterSection');
+      var container = document.getElementById('budgetContainer');
+      if (Array.isArray(State.allItems) && State.allItems.length > 0) return true;
+      if (section && section.style.display && section.style.display !== 'none') return true;
+      if (container && container.children && container.children.length > 0) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function scheduleInitialLoadFallbacks() {
+    var retryDelays = [1200, 3000, 5500];
+    retryDelays.forEach(function(delay){
+      window.setTimeout(function(){
+        try {
+          if (hasRenderedMainData()) return;
+          if (window._supportMode === true) return;
+          loadData().catch(function(err){
+            console.warn('Fallback load failed', err);
+          });
+        } catch (e) {
+          console.warn('scheduleInitialLoadFallbacks error', e);
+        }
+      }, delay);
+    });
+  }
+
+  window._waitForGasAndLoad = function _waitForGasAndLoad() {
+    if (window._appLoadWaiting) return;
+    window._appLoadWaiting = true;
+
+    function runLoad() {
+      try {
+        loadData().catch(function(err){
+          console.warn('_waitForGasAndLoad loadData failed', err);
+        }).finally(function(){
+          window._appLoadWaiting = false;
+        });
+        window._appInitialized = true;
+      } catch (e) {
+        window._appLoadWaiting = false;
+        console.warn('_waitForGasAndLoad loadData threw', e);
+      }
+    }
+
+    if (window.google && google.script && google.script.run) {
+      runLoad();
+      return;
+    }
+
+    var attempts = 0;
+    var tid = setInterval(function () {
+      attempts++;
+      if (window.google && google.script && google.script.run) {
+        clearInterval(tid);
+        runLoad();
+      } else if (attempts > 100) {
+        clearInterval(tid);
+        window._appLoadWaiting = false;
+        console.error('_waitForGasAndLoad: timeout');
+      }
+    }, 100);
+  };
+
+  function resetFilters() {
+    ['searchItemId', 'searchItem', 'searchWork', 'searchDepartment'].forEach(function(id) {
+      var input = document.getElementById(id);
+      if (input) input.value = '';
+    });
+
+    var statusFilter = document.getElementById('budgetStatusFilter');
+    var sortFilter = document.getElementById('sortFilter');
+    if (statusFilter) statusFilter.value = 'all';
+    if (sortFilter) sortFilter.value = 'default';
+
+    applyFilters();
   }
 
   function bindFormAndFilters() {
@@ -148,7 +466,18 @@
         window.displayFormErrors({});
 
         if (typeof window.recordExpense === 'function') {
-          window.recordExpense(State.selectedItem && State.selectedItem.itemId, formData.amount, formData.description, formData.date);
+          Promise.resolve(window.recordExpense(State.selectedItem && State.selectedItem.itemId, formData.amount, formData.description, formData.date))
+            .then(function(res) {
+              if (!res || res.success) return;
+              if (typeof window.showCustomAlert === 'function') {
+                window.showCustomAlert('error', 'บันทึกไม่สำเร็จ', res.message || 'ไม่สามารถบันทึกรายการได้');
+              }
+            })
+            .catch(function(err) {
+              if (typeof window.showCustomAlert === 'function') {
+                window.showCustomAlert('error', 'เกิดข้อผิดพลาด', String(err));
+              }
+            });
         } else {
           console.warn('recordExpense function not found');
         }
@@ -174,28 +503,47 @@
     const resetBtn = document.querySelector('[data-action="reset-filters"]');
     if (resetBtn && !resetBtn.__budgetBound) {
       resetBtn.__budgetBound = true;
-      resetBtn.addEventListener('click', function() {
-        ['searchItemId', 'searchItem', 'searchWork', 'searchDepartment'].forEach(function(id) {
-          const input = document.getElementById(id);
-          if (input) input.value = '';
-        });
-        const statusFilter = document.getElementById('budgetStatusFilter');
-        const sortFilter = document.getElementById('sortFilter');
-        if (statusFilter) statusFilter.value = 'all';
-        if (sortFilter) sortFilter.value = 'default';
-        applyFilters();
-      });
+      resetBtn.addEventListener('click', resetFilters);
     }
   }
 
-  document.addEventListener('DOMContentLoaded', function() {
+  function initBudgetCore() {
+    if (window.__budgetCoreInitDone) return;
+    window.__budgetCoreInitDone = true;
     bindFormAndFilters();
-    loadData().catch(function(err){
-      console.warn('Initial load failed', err);
-    });
-  });
+    window._waitForGasAndLoad();
+    scheduleInitialLoadFallbacks();
+  }
+
+  window.ensureBudgetCoreBoot = function ensureBudgetCoreBoot() {
+    try {
+      if (!window.__budgetCoreInitDone) {
+        initBudgetCore();
+        return;
+      }
+      if (window._supportMode === true) return;
+      if (!hasRenderedMainData() && !window._appLoadWaiting && typeof window._waitForGasAndLoad === 'function') {
+        window._waitForGasAndLoad();
+      }
+    } catch (e) {
+      console.warn('ensureBudgetCoreBoot failed', e);
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBudgetCore);
+  } else {
+    initBudgetCore();
+  }
+
+  // GAS iframe reload can miss the normal DOMContentLoaded bootstrap.
+  window.setTimeout(window.ensureBudgetCoreBoot, 0);
+  window.setTimeout(window.ensureBudgetCoreBoot, 400);
+  window.setTimeout(window.ensureBudgetCoreBoot, 1200);
 
   window.applyFilters = window.applyFilters || applyFilters;
   window.loadData = window.loadData || loadData;
+  window.resetFilters = window.resetFilters || resetFilters;
+  window.recordExpense = window.recordExpense || recordExpense;
 })(window, document);
 </script>
