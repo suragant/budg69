@@ -420,6 +420,13 @@
           <div id="expenseAmountError" class="form-error" role="alert"></div>
         </div>
 
+        <div class="form-group" id="expenseQuantityGroup" style="display:none;">
+          <label class="form-label" for="expenseQuantity">จำนวนเบิกจ่าย *</label>
+          <input type="number" id="expenseQuantity" class="form-input" min="0.01" step="0.01" aria-describedby="expenseQuantityError" aria-label="จำนวนเบิกจ่าย">
+          <div id="expenseQuantityHelp" style="color:#666;font-size:12px;margin-top:6px;"></div>
+          <div id="expenseQuantityError" class="form-error" role="alert"></div>
+        </div>
+
         <div class="form-group">
           <label class="form-label" for="expenseDescription">รายละเอียด</label>
           <textarea id="expenseDescription" class="form-input" rows="3" maxlength="500" aria-describedby="expenseDescError expenseDescCharCount" aria-label="รายละเอียดการเบิกจ่าย"></textarea>

@@ -206,15 +206,16 @@
                 itemId: itemIdClient,
                 rowIndex: it.rowIndex,
                 department: it.department || '',
-                work: it.area||it.department||'',
-                budgetType: it.budgetCategory||'',
+                work: it.work || it.area || it.department || '',
+                budgetType: it.budgetType || it.budgetCategory || '',
                 category: it.category||'',
                 expenseType: it.expenseType||'',
-                item: it.item||'',
+                item: it.item || it.itemName || '',
                 budget: Number(it.budget||0)||0,
                 used: Number(it.used||0)||0,
                 remaining: Number(it.remaining||0)||0,
-                quantityUsed: Number(it.quantityUsed||0)||0,
+                quantityUsed: Number(it.usedQuantity != null ? it.usedQuantity : (it.quantityUsed != null ? it.quantityUsed : (it.usedQty != null ? it.usedQty : 0))) || 0,
+                allocatedQuantity: Number(it.allocatedQuantity != null ? it.allocatedQuantity : (it.allocatedQty != null ? it.allocatedQty : 0)) || 0,
                 canEdit: true,
                 _raw: it
               };
@@ -405,6 +406,33 @@
   try{ if (typeof loadSupportItemsList === 'function') window.loadSupportItemsList = loadSupportItemsList; }catch(e){}
   try{ if (typeof bindSupportExpenseButtons === 'function') window.bindSupportExpenseButtons = bindSupportExpenseButtons; }catch(e){}
   try{ if (typeof debugModalCount === 'function') window.debugModalCount = debugModalCount; }catch(e){}
+
+  try {
+    window.normalizeSupportViewItem = window.normalizeSupportViewItem || function(it) {
+      it = it || {};
+      var normalized = {
+        itemId: clientNormalizeItemId(it.itemId || it.id || ''),
+        rowIndex: Number(it.rowIndex || 0) || 0,
+        department: String(it.department || '').trim(),
+        work: String(it.work || it.area || it.department || '').trim(),
+        budgetType: String(it.budgetType || it.budgetCategory || '').trim(),
+        expenseType: String(it.expenseType || '').trim(),
+        item: String(it.item || it.itemName || '').trim(),
+        allocatedQuantity: Number(it.allocatedQuantity != null ? it.allocatedQuantity : (it.allocatedQty != null ? it.allocatedQty : 0)) || 0,
+        usedQuantity: Number(it.usedQuantity != null ? it.usedQuantity : (it.quantityUsed != null ? it.quantityUsed : (it.usedQty != null ? it.usedQty : 0))) || 0,
+        budget: Number(it.budget || 0) || 0,
+        used: Number(it.used || 0) || 0,
+        remaining: Number(it.remaining || 0) || 0
+      };
+      normalized.area = normalized.work;
+      normalized.budgetCategory = normalized.budgetType;
+      normalized.allocatedQty = normalized.allocatedQuantity;
+      normalized.quantityUsed = normalized.usedQuantity;
+      normalized.usedQty = normalized.usedQuantity;
+      normalized.itemName = normalized.item;
+      return normalized;
+    };
+  } catch(e){}
 
   // Expose small debug helper
   try {

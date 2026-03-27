@@ -87,11 +87,19 @@ function _normalizeReportForTemplate(reportType, reportData) {
     reportData.items = reportData.items.map(function(it, idx){
       it = it || {};
       it.itemId = it.itemId || it.item || it.itemName || ('item_' + idx);
+      it.item = it.item || it.itemName || '';
       it.itemName = it.itemName || it.item || '';
+      it.work = it.work || it.area || '';
+      it.area = it.area || it.work || '';
+      it.budgetType = it.budgetType || it.budgetCategory || '';
+      it.budgetCategory = it.budgetCategory || it.budgetType || '';
       it.budget = Number(it.budget || 0) || 0;
       it.used = Number(it.used || 0) || 0;
-      it.allocatedQty = Number(it.allocatedQty || it.allocated || 0) || 0;
-      it.qtyUsed = Number(it.qtyUsed || 0) || 0;
+      it.allocatedQuantity = Number(it.allocatedQuantity != null ? it.allocatedQuantity : (it.allocatedQty != null ? it.allocatedQty : (it.allocated != null ? it.allocated : 0))) || 0;
+      it.allocatedQty = it.allocatedQuantity;
+      it.usedQuantity = Number(it.usedQuantity != null ? it.usedQuantity : (it.qtyUsed != null ? it.qtyUsed : (it.quantityUsed != null ? it.quantityUsed : 0))) || 0;
+      it.qtyUsed = it.usedQuantity;
+      it.quantityUsed = it.usedQuantity;
       it.remaining = Number(it.remaining || 0) || 0;
       // months: ensure length 12
       if (Array.isArray(it.months)) {

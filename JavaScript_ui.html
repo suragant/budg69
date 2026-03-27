@@ -193,6 +193,20 @@
     }) || null;
   }
 
+  function isSupportItem(item) {
+    try {
+      var itemId = String(item && item.itemId || '').trim().toUpperCase();
+      if (window._supportMode === true) return true;
+      if (window._supportDefaultPrefix) {
+        var pref = String(window._supportDefaultPrefix).trim().toUpperCase();
+        if (pref && (itemId.indexOf(pref + '-') === 0 || itemId.indexOf(pref) === 0)) return true;
+      }
+      return /^SP\d+/i.test(itemId);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function openExpense(itemId) {
     var item = findItemById(itemId);
     if (!item) {
@@ -202,21 +216,44 @@
 
     State.selectedItem = item;
     ensureExpenseHiddenItemId().value = item.itemId || '';
+    var isSupport = isSupportItem(item);
     var modalDetails = document.getElementById('modalDetails');
     if (modalDetails) {
-      modalDetails.innerHTML = '<strong>' + escapeHtmlSafe(item.item || item.itemId) + '</strong><br>\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d ' + fmtCurrency(item.remaining) + ' \u0e1a\u0e32\u0e17';
+      var details = '<strong>' + escapeHtmlSafe(item.item || item.itemId) + '</strong><br>\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d ' + fmtCurrency(item.remaining) + ' \u0e1a\u0e32\u0e17';
+      if (isSupport) {
+        var allocatedQty = Number(item.allocatedQuantity != null ? item.allocatedQuantity : (item.allocatedQty != null ? item.allocatedQty : 0)) || 0;
+        var usedQty = Number(item.usedQuantity != null ? item.usedQuantity : (item.quantityUsed != null ? item.quantityUsed : (item.usedQty != null ? item.usedQty : 0))) || 0;
+        var remainingQty = Number((allocatedQty - usedQty).toFixed(4));
+        details += '<br>\u0e08\u0e33\u0e19\u0e27\u0e19\u0e08\u0e31\u0e14\u0e2a\u0e23\u0e23 ' + escapeHtmlSafe(allocatedQty) + ' | \u0e40\u0e1a\u0e34\u0e01\u0e41\u0e25\u0e49\u0e27 ' + escapeHtmlSafe(usedQty) + ' | \u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d ' + escapeHtmlSafe(remainingQty);
+      }
+      modalDetails.innerHTML = details;
     }
 
     var dateInput = document.getElementById('expenseDate');
     if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
     var amountInput = document.getElementById('expenseAmount');
     if (amountInput) amountInput.value = '';
+    var quantityGroup = document.getElementById('expenseQuantityGroup');
+    var quantityInput = document.getElementById('expenseQuantity');
+    var quantityHelp = document.getElementById('expenseQuantityHelp');
+    if (quantityGroup) quantityGroup.style.display = isSupport ? 'block' : 'none';
+    if (quantityInput) quantityInput.value = '';
+    if (quantityInput) quantityInput.required = !!isSupport;
+    if (quantityHelp) {
+      quantityHelp.textContent = isSupport
+        ? '\u0e01\u0e23\u0e2d\u0e01\u0e08\u0e33\u0e19\u0e27\u0e19\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e22\u0e2d\u0e14\u0e40\u0e1a\u0e34\u0e01\u0e08\u0e48\u0e32\u0e22\u0e02\u0e2d\u0e07 support'
+        : '';
+    }
     var descInput = document.getElementById('expenseDescription');
     if (descInput) descInput.value = '';
     if (typeof window.displayFormErrors === 'function') window.displayFormErrors({});
     if (typeof window.openModal === 'function') window.openModal('expenseModal');
     return true;
   }
+
+  window.openSupportExpenseModal = window.openSupportExpenseModal || function(itemId) {
+    return openExpense(itemId);
+  };
 
   function showHistory(history, currentUserEmail) {
     var container = document.getElementById('historyContainer');

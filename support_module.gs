@@ -6,6 +6,36 @@
 
 const SUPPORT_SHEET_NAME = 'Support';
 
+function normalizeSupportItemModel(raw) {
+  raw = raw || {};
+
+  const model = {
+    itemId: normalizeItemId(raw.itemId || raw.id || ''),
+    rowIndex: Number(raw.rowIndex || 0) || 0,
+    department: (raw.department || '').toString().trim(),
+    work: (raw.work || raw.area || '').toString().trim(),
+    budgetType: (raw.budgetType || raw.budgetCategory || '').toString().trim(),
+    expenseType: (raw.expenseType || '').toString().trim(),
+    item: (raw.item || raw.itemName || '').toString().trim(),
+    allocatedQuantity: Number(raw.allocatedQuantity != null ? raw.allocatedQuantity : (raw.allocatedQty != null ? raw.allocatedQty : 0)) || 0,
+    usedQuantity: Number(raw.usedQuantity != null ? raw.usedQuantity : (raw.quantityUsed != null ? raw.quantityUsed : (raw.qtyUsed != null ? raw.qtyUsed : 0))) || 0,
+    budget: Number(raw.budget != null ? raw.budget : (raw.budgetMoney != null ? raw.budgetMoney : 0)) || 0,
+    used: Number(raw.used != null ? raw.used : (raw.usedMoney != null ? raw.usedMoney : 0)) || 0,
+    remaining: Number(raw.remaining != null ? raw.remaining : (raw.remainingMoney != null ? raw.remainingMoney : 0)) || 0,
+    note: (raw.note || '').toString().trim()
+  };
+
+  // backward-compatible aliases for existing support/report code
+  model.area = model.work;
+  model.budgetCategory = model.budgetType;
+  model.allocatedQty = model.allocatedQuantity;
+  model.quantityUsed = model.usedQuantity;
+  model.qtyUsed = model.usedQuantity;
+  model.itemName = model.item;
+
+  return model;
+}
+
 function ensureSupportSheetExists() {
   const ss = getSpreadsheet();
   let sheet = resolveSheet(SUPPORT_SHEET_NAME);
@@ -65,21 +95,21 @@ function getSupportItemsSupport() {
       const idRaw = _isValidIndex(map.itemId) ? row[map.itemId] : row[0];
       const id = normalizeItemId(idRaw || '');
       const dept = _isValidIndex(map.department) ? row[map.department] : (row[1] || '');
-      const obj = {
+      const obj = normalizeSupportItemModel({
         itemId: id,
         rowIndex: i + 1,
         department: dept || '',
-        budgetCategory: _isValidIndex(map.budgetCategory) ? row[map.budgetCategory] : '',
-        area: _isValidIndex(map.area) ? row[map.area] : '',
+        budgetType: _isValidIndex(map.budgetCategory) ? row[map.budgetCategory] : '',
+        work: _isValidIndex(map.area) ? row[map.area] : '',
         expenseType: _isValidIndex(map.expenseType) ? row[map.expenseType] : '',
         item: _isValidIndex(map.item) ? row[map.item] : '',
-        allocatedQty: _isValidIndex(map.allocatedQty) ? row[map.allocatedQty] : '',
-        quantityUsed: _isValidIndex(map.usedQty) ? Number(row[map.usedQty] || 0) : 0,
+        allocatedQuantity: _isValidIndex(map.allocatedQty) ? row[map.allocatedQty] : '',
+        usedQuantity: _isValidIndex(map.usedQty) ? Number(row[map.usedQty] || 0) : 0,
         budget: _isValidIndex(map.budgetMoney) ? Number(row[map.budgetMoney] || 0) : 0,
         used: _isValidIndex(map.usedMoney) ? Number(row[map.usedMoney] || 0) : 0,
         remaining: _isValidIndex(map.remainingMoney) ? Number(row[map.remainingMoney] || 0) : 0,
         note: _isValidIndex(map.note) ? row[map.note] : ''
-      };
+      });
       // permission filter: admin sees all, otherwise only own department (normalize spaces/case)
       if (
         !obj.department ||
@@ -276,16 +306,18 @@ function getSupportQuarterlyReport(year, fiscalStartMonth) {
       const row = data[r] || [];
       const idRaw = _isValidIndex(map.itemId) ? row[map.itemId] : row[0] || '';
       const id = normalizeItemId(idRaw);
-      itemsMap[id] = {
+      itemsMap[id] = normalizeSupportItemModel({
         itemId: id,
-        area: _isValidIndex(map.department) ? (row[map.department] || '') : '',
+        department: _isValidIndex(map.department) ? (row[map.department] || '') : '',
+        work: _isValidIndex(map.area) ? (row[map.area] || '') : '',
+        budgetType: _isValidIndex(map.budgetCategory) ? (row[map.budgetCategory] || '') : '',
         expenseType: _isValidIndex(map.expenseType) ? (row[map.expenseType] || '') : '',
         itemName: _isValidIndex(map.item) ? (row[map.item] || '') : '',
         budget: _isValidIndex(map.budgetMoney) ? Number(row[map.budgetMoney] || 0) : 0,
         used: _isValidIndex(map.usedMoney) ? Number(row[map.usedMoney] || 0) : 0,
         remaining: _isValidIndex(map.remainingMoney) ? Number(row[map.remainingMoney] || 0) : 0,
         quarters: { Q1:0, Q2:0, Q3:0, Q4:0 }
-      };
+      });
     }
 
     const byArea = {};
@@ -316,13 +348,13 @@ function getSupportQuarterlyReport(year, fiscalStartMonth) {
 
             let meta = itemsMap[itemId];
             if (!meta) {
-              meta = { itemId: itemId, area: 'ไม่ระบุ', expenseType: 'ไม่ระบุ', itemName: '', budget:0, used:0, remaining:0, quarters:{Q1:0,Q2:0,Q3:0,Q4:0} };
+              meta = normalizeSupportItemModel({ itemId: itemId, work: 'ไม่ระบุ', expenseType: 'ไม่ระบุ', itemName: '', budget:0, used:0, remaining:0, quarters:{Q1:0,Q2:0,Q3:0,Q4:0} });
               itemsMap[itemId] = meta;
             }
             meta.quarters[qName] = (meta.quarters[qName] || 0) + amt;
 
-            if (!byArea[meta.area]) byArea[meta.area] = { Q1:0,Q2:0,Q3:0,Q4:0, total:0 };
-            byArea[meta.area][qName] += amt; byArea[meta.area].total += amt;
+            if (!byArea[meta.work]) byArea[meta.work] = { Q1:0,Q2:0,Q3:0,Q4:0, total:0 };
+            byArea[meta.work][qName] += amt; byArea[meta.work].total += amt;
 
             if (!byExpenseType[meta.expenseType]) byExpenseType[meta.expenseType] = { Q1:0,Q2:0,Q3:0,Q4:0, total:0 };
             byExpenseType[meta.expenseType][qName] += amt; byExpenseType[meta.expenseType].total += amt;
@@ -335,6 +367,156 @@ function getSupportQuarterlyReport(year, fiscalStartMonth) {
 
     const items = Object.keys(itemsMap).map(k => itemsMap[k]);
     return createResponse(true, '', { year: year, fiscalStartMonth: fiscalStartMonth, byArea: byArea, byExpenseType: byExpenseType, items: items });
+  } catch (e) {
+    Logger.log('getSupportQuarterlyReport error: ' + e.toString());
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + e.toString());
+  }
+}
+
+// Canonical support field overrides kept at file end so they win over legacy declarations.
+function ensureSupportSheetExists() {
+  const ss = getSpreadsheet();
+  let sheet = resolveSheet(SUPPORT_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SUPPORT_SHEET_NAME);
+    const headers = [[
+      'Item ID', 'สำนัก/กอง', 'งบรายจ่าย', 'ด้าน', 'ประเภทรายจ่าย', 'รายการ',
+      'จำนวนจัดสรร', 'จำนวนเบิกจ่าย', 'งบประมาณจัดสรร', 'งบประมาณเบิกจ่าย', 'งบประมาณคงเหลือ', 'หมายเหตุ'
+    ]];
+    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
+    try { sheet.getRange('A:A').setNumberFormat('@'); } catch (e) {}
+  }
+  return sheet;
+}
+
+function mapSupportColumns(headers) {
+  headers = headers || [];
+  const lower = headers.map(function(h) {
+    return (h || '').toString().trim().toLowerCase();
+  });
+  function findAny(list) {
+    for (let i = 0; i < list.length; i++) {
+      const idx = lower.indexOf((list[i] || '').toString().trim().toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+  return {
+    itemId: findAny(['item id', 'itemid', 'id', 'รหัส', 'รหัสรายการ', 'item', 'บาร์โค้ด']),
+    department: findAny(['สำนัก/กอง', 'หน่วยงาน', 'department', 'office', 'สำนัก', 'กอง']),
+    budgetCategory: findAny(['งบรายจ่าย', 'ประเภทงบ', 'budgetcategory', 'budget type']),
+    area: findAny(['ด้าน', 'area', 'work', 'งาน']),
+    expenseType: findAny(['ประเภทรายจ่าย', 'expense type', 'ประเภท']),
+    item: findAny(['รายการ', 'description', 'item', 'detail']),
+    allocatedQty: findAny(['จำนวนจัดสรร', 'จำนวนจัดสรร(หน่วย)', 'allocatedqty', 'qty', 'quantity']),
+    usedQty: findAny(['จำนวนเบิกจ่าย', 'จำนวนเบิก', 'usedqty', 'quantity_used']),
+    budgetMoney: findAny(['งบประมาณจัดสรร', 'งบประมาณ', 'budget', 'งบจัดสรร']),
+    usedMoney: findAny(['งบประมาณเบิกจ่าย', 'usedmoney', 'amount_used', 'เบิกจ่าย']),
+    remainingMoney: findAny(['งบประมาณคงเหลือ', 'คงเหลือ', 'remaining', 'balance']),
+    note: findAny(['หมายเหตุ', 'note', 'comments'])
+  };
+}
+
+function getSupportQuarterlyReport(year, fiscalStartMonth) {
+  try {
+    year = Number(year) || (new Date()).getFullYear();
+    fiscalStartMonth = Number(fiscalStartMonth) || 10;
+
+    const sheet = resolveSheet(SUPPORT_SHEET_NAME);
+    if (!sheet) return createResponse(false, 'ไม่พบชีต Support');
+    const data = sheet.getDataRange().getValues();
+    if (!data || data.length < 2) return createResponse(false, 'ไม่มีข้อมูล Support');
+    const headers = data[0];
+    const map = mapSupportColumns(headers);
+
+    const itemsMap = {};
+    for (let r = 1; r < data.length; r++) {
+      const row = data[r] || [];
+      const idRaw = _isValidIndex(map.itemId) ? row[map.itemId] : row[0] || '';
+      const id = normalizeItemId(idRaw);
+      itemsMap[id] = normalizeSupportItemModel({
+        itemId: id,
+        department: _isValidIndex(map.department) ? (row[map.department] || '') : '',
+        work: _isValidIndex(map.area) ? (row[map.area] || '') : '',
+        budgetType: _isValidIndex(map.budgetCategory) ? (row[map.budgetCategory] || '') : '',
+        expenseType: _isValidIndex(map.expenseType) ? (row[map.expenseType] || '') : '',
+        item: _isValidIndex(map.item) ? (row[map.item] || '') : '',
+        budget: _isValidIndex(map.budgetMoney) ? Number(row[map.budgetMoney] || 0) : 0,
+        used: _isValidIndex(map.usedMoney) ? Number(row[map.usedMoney] || 0) : 0,
+        remaining: _isValidIndex(map.remainingMoney) ? Number(row[map.remainingMoney] || 0) : 0,
+        quarters: { Q1: 0, Q2: 0, Q3: 0, Q4: 0 }
+      });
+    }
+
+    const byArea = {};
+    const byExpenseType = {};
+    const logSheet = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
+    if (logSheet) {
+      const logData = logSheet.getDataRange().getValues();
+      if (logData && logData.length > 1) {
+        const logHeaders = logData[0].map(function(h) {
+          return (h || '').toString().trim().toLowerCase();
+        });
+        const colTimestamp = logHeaders.indexOf('timestamp') >= 0 ? logHeaders.indexOf('timestamp') : 0;
+        const colItem = logHeaders.indexOf('item id') >= 0 ? logHeaders.indexOf('item id') : 3;
+        const colAmount = logHeaders.indexOf('amount') >= 0 ? logHeaders.indexOf('amount') : 4;
+        const colType = logHeaders.indexOf('type') >= 0 ? logHeaders.indexOf('type') : (logHeaders.length - 1);
+
+        for (let i = 1; i < logData.length; i++) {
+          try {
+            const row = logData[i];
+            const typeVal = (row[colType] || '').toString().trim().toLowerCase();
+            if (typeVal !== 'support') continue;
+            const ts = new Date(row[colTimestamp]);
+            if (isNaN(ts) || ts.getFullYear() !== year) continue;
+            const month = ts.getMonth() + 1;
+            const offset = ((month - fiscalStartMonth + 12) % 12);
+            const qIndex = Math.floor(offset / 3);
+            const qName = 'Q' + (qIndex + 1);
+            const itemId = normalizeItemId(row[colItem] || '');
+            const amt = Number(row[colAmount] || 0) || 0;
+
+            let meta = itemsMap[itemId];
+            if (!meta) {
+              meta = normalizeSupportItemModel({
+                itemId: itemId,
+                department: 'ไม่ระบุ',
+                work: 'ไม่ระบุ',
+                budgetType: 'ไม่ระบุ',
+                expenseType: 'ไม่ระบุ',
+                item: '',
+                budget: 0,
+                used: 0,
+                remaining: 0,
+                quarters: { Q1: 0, Q2: 0, Q3: 0, Q4: 0 }
+              });
+              itemsMap[itemId] = meta;
+            }
+
+            meta.quarters[qName] = (meta.quarters[qName] || 0) + amt;
+
+            if (!byArea[meta.work]) byArea[meta.work] = { Q1: 0, Q2: 0, Q3: 0, Q4: 0, total: 0 };
+            byArea[meta.work][qName] += amt;
+            byArea[meta.work].total += amt;
+
+            if (!byExpenseType[meta.expenseType]) byExpenseType[meta.expenseType] = { Q1: 0, Q2: 0, Q3: 0, Q4: 0, total: 0 };
+            byExpenseType[meta.expenseType][qName] += amt;
+            byExpenseType[meta.expenseType].total += amt;
+          } catch (e) {
+            Logger.log('support log parse error: ' + e.toString());
+          }
+        }
+      }
+    }
+
+    const items = Object.keys(itemsMap).map(function(k) { return itemsMap[k]; });
+    return createResponse(true, '', {
+      year: year,
+      fiscalStartMonth: fiscalStartMonth,
+      byArea: byArea,
+      byExpenseType: byExpenseType,
+      items: items
+    });
   } catch (e) {
     Logger.log('getSupportQuarterlyReport error: ' + e.toString());
     return createResponse(false, 'เกิดข้อผิดพลาด: ' + e.toString());

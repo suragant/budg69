@@ -43,6 +43,81 @@
 
     <!-- cards container -->
     <div id="budgetContainer" class="budget-grid" style="margin-top:16px;"></div>
+
+    <div id="expenseModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="expenseModalTitle">บันทึกการเบิกจ่าย</h2>
+          <div id="modalDetails" style="color: #666; font-size: 14px; margin-top: 5px;"></div>
+        </div>
+
+        <div id="expenseFormErrors" style="display: none; padding: 10px; background: #fee; border: 1px solid #f99; border-radius: 4px; margin-bottom: 15px; color: #c00;" role="alert" aria-live="assertive"></div>
+
+        <form id="expenseForm" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="expenseDate">วันที่เบิกจ่าย *</label>
+            <input type="date" id="expenseDate" class="form-input" required aria-describedby="expenseDateError">
+            <div id="expenseDateError" class="form-error" role="alert"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="expenseAmount">จำนวนเงิน (บาท) *</label>
+            <input type="number" id="expenseAmount" class="form-input" required min="0.01" step="0.01" aria-describedby="expenseAmountError">
+            <div id="expenseAmountError" class="form-error" role="alert"></div>
+          </div>
+
+          <div class="form-group" id="expenseQuantityGroup" style="display:none;">
+            <label class="form-label" for="expenseQuantity">จำนวนเบิกจ่าย *</label>
+            <input type="number" id="expenseQuantity" class="form-input" min="0.01" step="0.01" aria-describedby="expenseQuantityError">
+            <div id="expenseQuantityHelp" style="color:#666;font-size:12px;margin-top:6px;"></div>
+            <div id="expenseQuantityError" class="form-error" role="alert"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="expenseDescription">รายละเอียด</label>
+            <textarea id="expenseDescription" class="form-input" rows="3" maxlength="500" aria-describedby="expenseDescError expenseDescCharCount"></textarea>
+            <div id="expenseDescError" class="form-error" role="alert"></div>
+            <small id="expenseDescCharCount" style="color: #999; display: block; margin-top: 5px;">0 / 500 ตัวอักษร</small>
+          </div>
+
+          <div class="modal-actions">
+            <button type="submit" class="btn btn-primary" id="expenseSubmitBtn">บันทึก</button>
+            <button type="button" class="btn btn-secondary" data-action="close-modal" data-target="expenseModal">ยกเลิก</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="historyModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="historyModalTitle">ประวัติการทำรายการ</h2>
+          <div id="historyDetails" style="color: #666; font-size: 14px; margin-top: 5px;"></div>
+        </div>
+
+        <div id="historyLoading" style="display: none; text-align: center; padding: 20px;" role="status" aria-live="polite">
+          กำลังโหลดประวัติ...
+        </div>
+
+        <div id="historyContainer" style="max-height: 60vh; overflow-y: auto;"></div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" data-action="close-modal" data-target="historyModal">ปิด</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="customAlertModal" class="modal" role="alertdialog" aria-labelledby="customAlertTitle" aria-modal="true">
+      <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+          <h2 id="customAlertTitle">แจ้งเตือน</h2>
+        </div>
+        <div id="customAlertMessage" style="padding: 15px; line-height: 1.6;"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-primary" data-action="close-modal" data-target="customAlertModal" id="customAlertOkBtn">ตกลง</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- includes in the same order as main Index -->
@@ -59,6 +134,5 @@
   <?!= include('support_client'); ?>
   <?!= include('support_inline_quantity'); ?>
   <?!= include('support_export'); ?>
-  <?!= include('showSupportView'); ?>
 </body>
 </html>

@@ -2,223 +2,350 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>รายงาน: งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
+  <title>รายงานงบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
 
-  @page { size: A4 landscape; margin: 28pt 32pt; }
+    @page { size: A4 landscape; margin: 20pt 24pt; }
 
-  * { box-sizing: border-box; }
+    * { box-sizing: border-box; }
 
-  body {
-    font-family: 'Sarabun', 'Noto Sans Thai', Arial, sans-serif;
-    font-size: 11px;
-    color: #1a1a1a;
-    margin: 0;
-    background: #fff;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+    body {
+      margin: 0;
+      font-family: 'TH Sarabun New', 'Sarabun', 'Noto Sans Thai', Arial, sans-serif;
+      color: #1f2937;
+      background: #ffffff;
+      font-size: 16pt;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
 
-  .page { padding: 18px 24px; max-width: 100%; }
+    .page {
+      padding: 8pt 10pt 0;
+    }
 
-  /* ── Header ── */
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 14px;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #667eea;
-  }
-  .title {
-    font-size: 15px;
-    font-weight: 700;
-    color: #2d3a8c;
-    margin: 0 0 4px 0;
-    line-height: 1.4;
-  }
-  .meta { font-size: 10px; color: #666; line-height: 1.6; }
+    .report-shell {
+      border: 1px solid #d7def7;
+      border-radius: 14px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #f8faff 0%, #ffffff 22%);
+    }
 
-  /* ── Table ── */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 10.5px;
-    table-layout: fixed;
-  }
+    .hero {
+      padding: 20pt 22pt 16pt;
+      border-bottom: 2px solid #7488f1;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18pt;
+    }
 
-  /* column widths: รายการ ยาว, เดือน แคบ, คงเหลือ กลาง */
-  col.col-name     { width: 22%; }
-  col.col-month    { width: 5.5%; }
-  col.col-remain   { width: 7%; }
+    .hero-title {
+      margin: 0;
+      font-size: 24pt;
+      line-height: 1.35;
+      color: #2d3a8c;
+      font-weight: 700;
+    }
 
-  th, td {
-    border: 1px solid #d8dce8;
-    padding: 5px 6px;
-    vertical-align: middle;
-    word-break: break-word;
-    line-height: 1.45;
-  }
+    .hero-subtitle {
+      margin-top: 4pt;
+      font-size: 16pt;
+      color: #64748b;
+    }
 
-  /* header row */
-  thead tr th {
-    background: #667eea;
-    color: #fff;
-    font-weight: 700;
-    text-align: center;
-    font-size: 10px;
-    white-space: nowrap;
-    padding: 6px 4px;
-  }
-  thead tr th:first-child { text-align: left; padding-left: 8px; }
+    .hero-meta {
+      min-width: 230pt;
+      text-align: right;
+      font-size: 14pt;
+      color: #64748b;
+      line-height: 1.7;
+    }
 
-  /* body rows */
-  tbody tr:nth-child(even) td { background: #f7f8fd; }
-  tbody tr:hover td { background: #eef0fb; }
+    .meta-strong {
+      color: #334155;
+      font-weight: 600;
+    }
 
-  td:first-child {
-    text-align: left;
-    padding-left: 8px;
-    color: #222;
-    font-size: 10.5px;
-  }
+    .summary-strip {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 1fr;
+      gap: 12pt;
+      padding: 16pt 22pt 0;
+    }
 
-  /* ตัวเลข */
-  .right {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    padding-right: 8px;
-    color: #1a1a1a;
-  }
+    .summary-card {
+      background: #ffffff;
+      border: 1px solid #dbe3ff;
+      border-radius: 12px;
+      padding: 12pt 14pt;
+      box-shadow: 0 6px 18px rgba(70, 92, 180, 0.08);
+    }
 
-  /* ค่าว่าง (-) หรี่สี */
-  .right.zero { color: #bbb; }
+    .summary-label {
+      font-size: 13pt;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 3pt;
+    }
 
-  /* footer */
-  tfoot td {
-    font-weight: 700;
-    background: #eef0fb;
-    border-top: 2px solid #667eea;
-    color: #2d3a8c;
-  }
-  tfoot td.right { color: #2d3a8c; }
+    .summary-value {
+      font-size: 20pt;
+      font-weight: 700;
+      color: #233876;
+      line-height: 1.2;
+    }
 
-  /* ── Summary ── */
-  .summary {
-    margin-top: 10px;
-    font-size: 10.5px;
-    color: #444;
-    line-height: 1.8;
-    padding-top: 6px;
-    border-top: 1px solid #e0e0e0;
-  }
-  .summary span { font-weight: 700; color: #2d3a8c; }
+    .summary-note {
+      margin-top: 3pt;
+      font-size: 13pt;
+      color: #6b7280;
+    }
 
-  .muted { color: #888; font-size: 10px; }
+    .table-wrap {
+      padding: 16pt 22pt 18pt;
+    }
 
-  @media print {
-    body { font-size: 10px; }
-    .page { padding: 0; }
-  }
-</style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 14pt;
+      background: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      page-break-inside: auto;
+      break-inside: auto;
+    }
+
+    col.col-name { width: 26%; }
+    col.col-month { width: 4.9%; }
+    col.col-remain { width: 8.2%; }
+
+    thead {
+      display: table-header-group;
+    }
+
+    thead th {
+      background: linear-gradient(135deg, #6278eb 0%, #5167d8 100%);
+      color: #ffffff;
+      border: 1px solid #7e92f3;
+      padding: 8px 6px;
+      text-align: center;
+      font-size: 12pt;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    thead th:first-child {
+      text-align: left;
+      padding-left: 10px;
+    }
+
+    tbody td,
+    tfoot td {
+      border: 1px solid #d7def1;
+      padding: 8px 6px;
+      vertical-align: top;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    tbody tr,
+    tfoot tr {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    tbody tr:nth-child(even) td {
+      background: #f8faff;
+    }
+
+    tbody td:first-child {
+      padding-left: 12px;
+      color: #1f2937;
+      font-weight: 500;
+      font-size: 14pt;
+    }
+
+    .right {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .zero {
+      color: #c0c6d4;
+    }
+
+    .remain {
+      color: #1d4ed8;
+      font-weight: 600;
+    }
+
+    .used {
+      color: #c2410c;
+      font-weight: 600;
+    }
+
+    tfoot td {
+      background: #eef3ff;
+      color: #233876;
+      font-weight: 700;
+      border-top: 2px solid #6278eb;
+    }
+
+    .footer-note {
+      padding: 0 22pt 18pt;
+      color: #64748b;
+      font-size: 13pt;
+      line-height: 1.7;
+      display: flex;
+      justify-content: space-between;
+      gap: 12pt;
+    }
+
+    .muted {
+      color: #94a3b8;
+      font-size: 14pt;
+      padding: 18pt 22pt 20pt;
+    }
+
+    @media print {
+      .page { padding: 0; }
+      .summary-card { box-shadow: none; }
+      thead { display: table-header-group; }
+      tfoot { display: table-row-group; }
+      tbody tr, tfoot tr {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="page">
-    <div class="header">
-      <div>
-        <div class="title">รายงาน: งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</div>
-        <div class="meta">ปี <?= (params && params.year) || (report && report.year) || '' ?></div>
-      </div>
-      <div style="text-align:right;">
-        <div class="meta">สร้างวันที่: <?= (generatedAt ? Utilities.formatDate(generatedAt, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm") : '') ?></div>
-        <? if (generatedBy) { ?><div class="meta">โดย: <?= generatedBy ?></div><? } ?>
-      </div>
-    </div>
-
     <? 
+      function formatMillionBaht(value) {
+        var n = Number(value || 0) || 0;
+        if (n === 0) return '-';
+        return (n / 1000000).toLocaleString('th-TH', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+      }
+
       var monthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
       var fiscal = (params && Number(params.fiscalStartMonth)) ? Number(params.fiscalStartMonth) : (report && report.fiscalStartMonth) ? Number(report.fiscalStartMonth) : 10;
       var headerMonths = [];
-      for (var i=0;i<12;i++){
-        var calM = ((fiscal -1 + i) % 12);
-        headerMonths.push( { idx: calM+1, name: monthNames[calM] } );
+      for (var i = 0; i < 12; i++) {
+        var calM = ((fiscal - 1 + i) % 12);
+        headerMonths.push({ idx: calM + 1, name: monthNames[calM] });
       }
-      var items = report.items || [];
 
-      // compute totals per month and total remaining/budget
-      var totals = Array.apply(null, Array(12)).map(Number.prototype.valueOf,0);
+      var items = report.items || [];
+      var totals = Array.apply(null, Array(12)).map(Number.prototype.valueOf, 0);
       var totalRemaining = 0;
       var totalBudget = 0;
-      for (var ii=0; ii<items.length; ii++){
+
+      for (var ii = 0; ii < items.length; ii++) {
         var it = items[ii] || {};
-        var months = Array.isArray(it.months) ? it.months : Array.apply(null, Array(12)).map(Number.prototype.valueOf,0);
-        for (var m=0;m<12;m++){
-          totals[m] = totals[m] + (Number(months[m]||0) || 0);
+        var months = Array.isArray(it.months) ? it.months : Array.apply(null, Array(12)).map(Number.prototype.valueOf, 0);
+        for (var m = 0; m < 12; m++) {
+          totals[m] = totals[m] + (Number(months[m] || 0) || 0);
         }
         totalRemaining += Number(it.remaining || 0) || 0;
         totalBudget += Number(it.budget || 0) || 0;
       }
+
+      var totalSpent = totalBudget - totalRemaining;
     ?>
 
-    <? if (!items || items.length === 0) { ?>
-      <div class="muted">ไม่มีข้อมูล</div>
-    <? } else { ?>
-      <table>
-          <colgroup>
-          <col class="col-name">
-          <? for(var ci=0;ci<12;ci++){ ?><col class="col-month"><? } ?>
-         <col class="col-remain">
-         </colgroup>
-        <thead>
-          <tr>
-            <th>รายการ</th>
-            <? headerMonths.forEach(function(h){ ?><th class="right"><?= h.name ?></th><? }); ?>
-            <th class="right">คงเหลือ</th>
-          </tr>
-        </thead>
-        <tbody>
-          <? items.forEach(function(it){
-               var months = Array.isArray(it.months) ? it.months : Array.apply(null, Array(12)).map(Number.prototype.valueOf,0);
-               months = months.concat(Array.apply(null, Array(12 - months.length)).map(Number.prototype.valueOf,0)).slice(0,12);
-               var remainVal = Number(it.remaining || 0) || 0;
-          ?>
-            <tr>
-              <td><?= (it.itemName || it.itemId || '') ?></td>
-              <? for (var mi=0; mi<12; mi++){ 
-                   var val = Number(months[mi] || 0) || 0;
-              ?>
-                <td class="right<?= (val===0)?' zero':'' ?>"><?=
-                 (val === 0) ? '-' : val.toLocaleString('th-TH', {minimumFractionDigits:2})
-              ?></td>
-              <? } ?>
-              <td class="right"><?=
-                (remainVal === 0) ? '-' : remainVal.toLocaleString('th-TH', {minimumFractionDigits:2})
-              ?></td>
-            </tr>
-          <? }); ?>
-        </tbody>
-
-        <tfoot>
-          <tr>
-            <td>รวมทั้งสิ้น</td>
-            <? for (var ti=0; ti<12; ti++){ 
-                 var tval = Number(totals[ti] || 0) || 0;
-            ?>
-              <td class="right"><?= (tval === 0) ? '-' : tval.toLocaleString('th-TH', {minimumFractionDigits:2}) ?></td>
-            <? } ?>
-            <td class="right"><?= (totalRemaining === 0) ? '-' : totalRemaining.toLocaleString('th-TH', {minimumFractionDigits:2}) ?></td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <div class="summary">
-        <div>สรุป: จำนวนรายการทั้งหมด <?= items.length ?> รายการ</div>
-        <div>รวมงบประมาณ: <?= (totalBudget === 0) ? '-' : totalBudget.toLocaleString('th-TH', {minimumFractionDigits:2}) ?> — รวมคงเหลือ: <?= (totalRemaining === 0) ? '-' : totalRemaining.toLocaleString('th-TH', {minimumFractionDigits:2}) ?></div>
+    <div class="report-shell">
+      <div class="hero">
+        <div>
+          <h1 class="hero-title">รายงานงบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</h1>
+          <div class="hero-subtitle">ปีงบประมาณ <?= (params && params.year) || (report && report.year) || '' ?></div>
+        </div>
+        <div class="hero-meta">
+          <div><span class="meta-strong">สร้างวันที่:</span> <?= (generatedAt ? Utilities.formatDate(generatedAt, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm") : '') ?></div>
+          <? if (generatedBy) { ?><div><span class="meta-strong">โดย:</span> <?= generatedBy ?></div><? } ?>
+          <div><span class="meta-strong">รอบปีงบประมาณ:</span> เริ่มเดือน <?= monthNames[(fiscal - 1 + 12) % 12] ?></div>
+        </div>
       </div>
-    <? } ?>
 
+      <? if (!items || items.length === 0) { ?>
+        <div class="muted">ไม่มีข้อมูลสำหรับสร้างรายงาน</div>
+      <? } else { ?>
+        <div class="summary-strip">
+          <div class="summary-card">
+            <div class="summary-label">จำนวนรายการ</div>
+            <div class="summary-value"><?= items.length ?> รายการ</div>
+            <div class="summary-note">สรุปรายการที่มีการจัดสรรในรายงานชุดนี้</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">งบประมาณรวม</div>
+            <div class="summary-value"><?= formatMillionBaht(totalBudget) ?></div>
+            <div class="summary-note">รวมยอดจัดสรรทั้งหมด (ลบ.)</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">คงเหลือรวม</div>
+            <div class="summary-value"><?= formatMillionBaht(totalRemaining) ?></div>
+            <div class="summary-note">เบิกจ่ายแล้ว <?= formatMillionBaht(totalSpent) ?> ลบ.</div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <colgroup>
+              <col class="col-name">
+              <? for (var ci = 0; ci < 12; ci++) { ?><col class="col-month"><? } ?>
+              <col class="col-remain">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>รายการ</th>
+                <? headerMonths.forEach(function(h) { ?><th><?= h.name ?></th><? }); ?>
+                <th>คงเหลือ (ลบ.)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <? items.forEach(function(it) {
+                   var months = Array.isArray(it.months) ? it.months : Array.apply(null, Array(12)).map(Number.prototype.valueOf, 0);
+                   months = months.concat(Array.apply(null, Array(12 - months.length)).map(Number.prototype.valueOf, 0)).slice(0, 12);
+                   var remainVal = Number(it.remaining || 0) || 0;
+              ?>
+                <tr>
+                  <td><?= (it.itemName || it.item || it.itemId || '') ?></td>
+                  <? for (var mi = 0; mi < 12; mi++) {
+                       var val = Number(months[mi] || 0) || 0;
+                  ?>
+                    <td class="right<?= (val === 0) ? ' zero' : '' ?><?= (val !== 0) ? ' used' : '' ?>">
+                      <?= formatMillionBaht(val) ?>
+                    </td>
+                  <? } ?>
+                  <td class="right remain"><?= formatMillionBaht(remainVal) ?></td>
+                </tr>
+              <? }); ?>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>รวมทั้งสิ้น</td>
+                <? for (var ti = 0; ti < 12; ti++) {
+                     var tval = Number(totals[ti] || 0) || 0;
+                ?>
+                  <td class="right"><?= formatMillionBaht(tval) ?></td>
+                <? } ?>
+                <td class="right"><?= formatMillionBaht(totalRemaining) ?></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="footer-note">
+          <div>รายงานนี้สรุปยอดตามรายการและแสดงการเบิกจ่ายรายเดือนตามปีงบประมาณ</div>
+          <div>รวมเบิกจ่ายแล้ว <?= formatMillionBaht(totalSpent) ?> ลบ.</div>
+        </div>
+      <? } ?>
+    </div>
   </div>
 </body>
 </html>

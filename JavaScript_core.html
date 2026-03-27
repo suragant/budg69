@@ -140,7 +140,7 @@
     }
   }
 
-  function recordExpense(itemId, amount, description, expenseDate) {
+  function recordExpense(itemId, amount, description, expenseDate, quantity) {
     try {
       var hidden = document.getElementById('expenseItemId');
       if (hidden && hidden.value) itemId = hidden.value;
@@ -158,9 +158,10 @@
         return Promise.resolve({ success: false, message: 'duplicate-suppressed' });
       }
 
+      var normalizedQuantity = Number(quantity || 0) || 0;
       var fnName = useSupportApi ? 'recordSupportExpenseSupport' : 'recordExpense';
       var args = useSupportApi
-        ? [normalizedItemId, amount, description, normalizedDate, 0]
+        ? [normalizedItemId, amount, description, normalizedDate, normalizedQuantity]
         : [normalizedItemId, amount, description, normalizedDate];
 
       return callServer(fnName, args).then(function(res){
@@ -448,7 +449,8 @@
         const formData = {
           date: (document.getElementById('expenseDate')?.value || '').trim(),
           amount: (document.getElementById('expenseAmount')?.value || '').trim(),
-          description: (document.getElementById('expenseDescription')?.value || '').trim()
+          description: (document.getElementById('expenseDescription')?.value || '').trim(),
+          quantity: (document.getElementById('expenseQuantity')?.value || '').trim()
         };
 
         const validation = window.validateExpenseForm(formData);
@@ -463,10 +465,30 @@
           return;
         }
 
+        const selectedItemId = (State.selectedItem && State.selectedItem.itemId) || '';
+        let supportLike = false;
+        try {
+          const itemIdText = String(selectedItemId || '').toUpperCase().trim();
+          if (window._supportMode === true) supportLike = true;
+          if (window._supportDefaultPrefix) {
+            const pref = String(window._supportDefaultPrefix).toUpperCase().trim();
+            if (pref && (itemIdText.indexOf(pref + '-') === 0 || itemIdText.indexOf(pref) === 0)) supportLike = true;
+          }
+          if (/^SP\d+/i.test(itemIdText)) supportLike = true;
+        } catch (e) {}
+
+        if (supportLike) {
+          const quantityNum = parseFloat(formData.quantity);
+          if (isNaN(quantityNum) || quantityNum <= 0) {
+            window.displayFormErrors({ expenseQuantity: 'จำนวนเบิกจ่ายต้องมากกว่า 0' });
+            return;
+          }
+        }
+
         window.displayFormErrors({});
 
         if (typeof window.recordExpense === 'function') {
-          Promise.resolve(window.recordExpense(State.selectedItem && State.selectedItem.itemId, formData.amount, formData.description, formData.date))
+          Promise.resolve(window.recordExpense(selectedItemId, formData.amount, formData.description, formData.date, formData.quantity))
             .then(function(res) {
               if (!res || res.success) return;
               if (typeof window.showCustomAlert === 'function') {

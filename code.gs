@@ -981,6 +981,7 @@ function checkBudgetAlerts() {
       else if (pct >= CONFIG.ALERT_THRESHOLD.medium)   { level='medium';   message=`ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${remaining.toLocaleString('th-TH')} บาท)`; }
       if (level) alerts.push({
         itemId: String(normalizeItemId(cols.itemId != null ? row[cols.itemId] : '') || '').trim(),
+        department: dept,
         work:   String(cols.work != null ? row[cols.work] || 'ไม่ระบุ' : 'ไม่ระบุ').trim(),
         item:   String(cols.item != null ? row[cols.item] || 'ไม่ระบุ' : 'ไม่ระบุ').trim(),
         budget: +budget, used: +used, remaining: +remaining,
@@ -992,6 +993,54 @@ function checkBudgetAlerts() {
     handleError('checkBudgetAlerts', error);
     return { success: false, message: 'เกิดข้อผิดพลาด: ' + (error?.message || error?.toString()), alerts: [] };
   }
+}
+
+function getBudgetAlertRecipients() {
+  try {
+    const usersSheet = resolveSheet(CONFIG.SHEETS.USERS);
+    if (!usersSheet) return [];
+    const data = usersSheet.getDataRange().getValues();
+    if (!data || data.length < 2) return [];
+
+    const recipients = [];
+    for (let i = 1; i < data.length; i++) {
+      const email = (data[i][0] || '').toString().trim();
+      const department = (data[i][1] || '').toString().trim();
+      const role = normalizeRoleValue(data[i][2]);
+      if (!email || !role) continue;
+      recipients.push({ email, department, role });
+    }
+    return recipients;
+  } catch (error) {
+    handleError('getBudgetAlertRecipients', error);
+    return [];
+  }
+}
+
+function buildBudgetAlertEmailBody(recipientEmail, alerts, dateStr) {
+  const critical = alerts.filter(a => a.level === 'critical');
+  const high = alerts.filter(a => a.level === 'high');
+  const medium = alerts.filter(a => a.level === 'medium');
+
+  const section = (arr, color, emoji, label) => {
+    if (!arr.length) return '';
+    return `<h3 style="color:${color};margin:18px 0 8px;">${emoji} ${label}</h3><ul style="padding-left:18px;">` +
+      arr.map(a => {
+        const deptText = a.department ? `${a.department} / ` : '';
+        return `<li style="margin-bottom:10px;"><strong>${a.itemId}</strong> - ${deptText}${a.work} > ${a.item}<br><span style="color:${color}">${a.message}</span></li>`;
+      }).join('') +
+      '</ul>';
+  };
+
+  return `<html><body style="font-family:Sarabun,Arial,sans-serif;">
+    <h2 style="color:#667eea;">🔔 รายงานสถานะงบประมาณประจำวัน (${dateStr})</h2>
+    <p>เรียน ${recipientEmail}</p>
+    <p>พบรายการแจ้งเตือนทั้งหมด <strong>${alerts.length}</strong> รายการ</p>
+    ${section(critical, '#ff4444', '🚨', 'เร่งด่วน (หมดงบหรือเหลือน้อยกว่า 5%)')}
+    ${section(high, '#FF9800', '⚠️', 'ควรระวัง (ใช้ 90-94%)')}
+    ${section(medium, '#FFC107', '📊', 'ติดตาม (ใช้ 80-89%)')}
+    <hr><p style="font-size:12px;color:#666;">ส่งจากระบบบันทึกการใช้งบประมาณอัตโนมัติ</p>
+  </body></html>`;
 }
 
 function sendDailyBudgetAlert() {
@@ -1024,6 +1073,68 @@ function sendDailyBudgetAlert() {
       htmlBody: body,
       name: 'ระบบบันทึกการใช้งบประมาณ'
     });
+  } catch (error) {
+    handleError('sendDailyBudgetAlert', error);
+  }
+}
+
+function sendDailyBudgetAlert() {
+  try {
+    const result = checkBudgetAlerts();
+    if (!result || !result.success || !result.alerts.length) return;
+
+    const alerts = result.alerts.slice();
+    const recipients = getBudgetAlertRecipients();
+    const dateStr = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'dd/MM/yyyy');
+    const sent = {};
+
+    recipients
+      .slice()
+      .sort((a, b) => {
+        const ra = normalizeRoleValue(a.role);
+        const rb = normalizeRoleValue(b.role);
+        if (ra === rb) return 0;
+        if (ra === 'admin') return -1;
+        if (rb === 'admin') return 1;
+        if (ra === 'head') return -1;
+        if (rb === 'head') return 1;
+        return 0;
+      })
+      .forEach(recipient => {
+        const email = (recipient.email || '').toString().trim();
+        const emailKey = email.toLowerCase();
+        const role = normalizeRoleValue(recipient.role);
+        const dept = normalizeAccessValue(recipient.department);
+        if (!email || sent[emailKey]) return;
+
+        let scopedAlerts = [];
+        if (role === 'admin') {
+          scopedAlerts = alerts;
+        } else if (role === 'head') {
+          scopedAlerts = alerts.filter(a => normalizeAccessValue(a.department) === dept);
+        } else {
+          return;
+        }
+
+        if (!scopedAlerts.length) return;
+
+        MailApp.sendEmail({
+          to: email,
+          subject: `🔔 แจ้งเตือนสถานะงบประมาณ - ${dateStr}`,
+          htmlBody: buildBudgetAlertEmailBody(email, scopedAlerts, dateStr),
+          name: 'ระบบบันทึกการใช้งบประมาณ'
+        });
+        sent[emailKey] = true;
+      });
+
+    if (!Object.keys(sent).length && CONFIG.ADMIN_EMAIL) {
+      MailApp.sendEmail({
+        to: CONFIG.ADMIN_EMAIL,
+        subject: `🔔 แจ้งเตือนสถานะงบประมาณ - ${dateStr}`,
+        htmlBody: buildBudgetAlertEmailBody(CONFIG.ADMIN_EMAIL, alerts, dateStr),
+        name: 'ระบบบันทึกการใช้งบประมาณ'
+      });
+    }
   } catch (error) {
     handleError('sendDailyBudgetAlert', error);
   }
