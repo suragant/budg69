@@ -13,6 +13,22 @@
     selectedItem: null
   };
 
+  var INITIAL_LOAD_RETRY_DELAYS = [1200, 3000, 5500];
+  var BOOTSTRAP_RETRY_DELAYS = [0, 400, 1200];
+
+  function scheduleDelayedCalls(fn, delays) {
+    if (typeof fn !== 'function') return;
+    (Array.isArray(delays) ? delays : []).forEach(function(delay) {
+      window.setTimeout(function() {
+        try {
+          fn(delay);
+        } catch (e) {
+          console.warn('scheduleDelayedCalls callback failed', e);
+        }
+      }, Number(delay || 0));
+    });
+  }
+
   function callServer(fnName, args) {
     args = Array.isArray(args) ? args : [];
 
@@ -360,20 +376,17 @@
   }
 
   function scheduleInitialLoadFallbacks() {
-    var retryDelays = [1200, 3000, 5500];
-    retryDelays.forEach(function(delay){
-      window.setTimeout(function(){
-        try {
-          if (hasRenderedMainData()) return;
-          if (window._supportMode === true) return;
-          loadData().catch(function(err){
-            console.warn('Fallback load failed', err);
-          });
-        } catch (e) {
-          console.warn('scheduleInitialLoadFallbacks error', e);
-        }
-      }, delay);
-    });
+    scheduleDelayedCalls(function() {
+      try {
+        if (hasRenderedMainData()) return;
+        if (window._supportMode === true) return;
+        loadData().catch(function(err){
+          console.warn('Fallback load failed', err);
+        });
+      } catch (e) {
+        console.warn('scheduleInitialLoadFallbacks error', e);
+      }
+    }, INITIAL_LOAD_RETRY_DELAYS);
   }
 
   window._waitForGasAndLoad = function _waitForGasAndLoad() {
@@ -559,9 +572,7 @@
   }
 
   // GAS iframe reload can miss the normal DOMContentLoaded bootstrap.
-  window.setTimeout(window.ensureBudgetCoreBoot, 0);
-  window.setTimeout(window.ensureBudgetCoreBoot, 400);
-  window.setTimeout(window.ensureBudgetCoreBoot, 1200);
+  scheduleDelayedCalls(window.ensureBudgetCoreBoot, BOOTSTRAP_RETRY_DELAYS);
 
   window.applyFilters = window.applyFilters || applyFilters;
   window.loadData = window.loadData || loadData;

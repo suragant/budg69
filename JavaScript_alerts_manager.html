@@ -1,4 +1,4 @@
-<script>
+﻿<script>
 /**
  * JavaScript_alerts_manager (robust close + clear flags + managed backdrop)
  * - Ensures modal/backdrop lifecycle is consistent
@@ -79,7 +79,7 @@
 
         html += '<div style="border:1px solid #eee;padding:10px;border-radius:6px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;background:#fff;">';
         html += '<div style="flex:1"><div style="font-weight:700;color:' + color + ';">' + (a.itemId ? escapeHtml(a.itemId) : '') + '</div>';
-        html += '<div style="color:#444;">' + (a.work ? escapeHtml(a.work) : '') + ' — ' + (a.item ? escapeHtml(a.item) : '') + '</div>';
+        html += '<div style="color:#444;">' + (a.work ? escapeHtml(a.work) : '') + ' - ' + (a.item ? escapeHtml(a.item) : '') + '</div>';
         html += '<div style="color:#666;margin-top:6px;font-size:13px;">' + (a.message ? escapeHtml(a.message) : '') + '</div></div>';
         html += '<div style="text-align:right;min-width:90px;"><div style="font-weight:700;color:' + color + ';">' + (a.percentage ? (a.percentage + '%') : '') + '</div>';
         html += '<div style="color:#666;margin-top:6px;">คงเหลือ: ' + ((a.remaining !== undefined) ? (Number(a.remaining).toLocaleString('th-TH')) : '-') + '</div></div>';
@@ -302,3 +302,5 @@
 
 })();
 </script>
+
+

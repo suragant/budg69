@@ -6,6 +6,22 @@
   if (root._autoRestoreSlimInstalled) return;
   root._autoRestoreSlimInstalled = true;
 
+  var MAIN_READY_RETRY_DELAYS = [300, 1200, 2500];
+  var BOOTSTRAP_RETRY_DELAYS = [0, 400, 1200, 2500];
+
+  function scheduleRetries(fn, delays) {
+    if (typeof fn !== 'function') return;
+    (Array.isArray(delays) ? delays : []).forEach(function(delay) {
+      setTimeout(function() {
+        try {
+          fn(delay);
+        } catch (e) {
+          console.warn('scheduleRetries failed', e);
+        }
+      }, Number(delay || 0));
+    });
+  }
+
   function isFn(value) {
     return typeof value === 'function';
   }
@@ -120,16 +136,17 @@
     installShowWorkExpenseTypesShim();
     installSafeShowAlertsShim();
     bindAlertButtons();
-    setTimeout(ensureMainAppReady, 300);
-    setTimeout(ensureMainAppReady, 1200);
-    setTimeout(ensureMainAppReady, 2500);
+    scheduleRetries(ensureMainAppReady, MAIN_READY_RETRY_DELAYS);
   }
 
   function scheduleFallbackBootstrap() {
-    setTimeout(init, 0);
-    setTimeout(ensureMainAppReady, 400);
-    setTimeout(ensureMainAppReady, 1200);
-    setTimeout(ensureMainAppReady, 2500);
+    scheduleRetries(function(delay) {
+      if (delay === 0) {
+        init();
+        return;
+      }
+      ensureMainAppReady();
+    }, BOOTSTRAP_RETRY_DELAYS);
     setTimeout(function() {
       try {
         if (typeof root.ensureBudgetCoreBoot === 'function') {

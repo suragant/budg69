@@ -113,6 +113,10 @@
     var color = progressColor(percent);
     var rawItemId = String(item.itemId || '');
     var rawWork = String(item.work || '-');
+    var allocatedQty = Number(item.allocatedQuantity != null ? item.allocatedQuantity : (item.allocatedQty != null ? item.allocatedQty : 0)) || 0;
+    var usedQty = Number(item.usedQuantity != null ? item.usedQuantity : (item.quantityUsed != null ? item.quantityUsed : (item.usedQty != null ? item.usedQty : 0))) || 0;
+    var remainingQty = Number((allocatedQty - usedQty).toFixed(4));
+    var showQtySummary = allocatedQty > 0 || usedQty > 0 || remainingQty !== 0;
     var itemId = escapeHtmlSafe(rawItemId);
     var work = escapeHtmlSafe(rawWork);
     var budgetType = escapeHtmlSafe(item.budgetType || '-');
@@ -141,6 +145,13 @@
       + '      <div><strong>\u0e2b\u0e19\u0e48\u0e27\u0e22\u0e07\u0e32\u0e19:</strong> ' + department + '</div>'
       + '      <div><strong>\u0e07\u0e32\u0e19:</strong> ' + work + '</div>'
       + '      <div><strong>\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17\u0e07\u0e1a:</strong> ' + budgetType + '</div>'
+      + (showQtySummary
+          ? '      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #dbe2f0;font-size:13px;line-height:1.6;">'
+            + '<div><strong>\u0e08\u0e33\u0e19\u0e27\u0e19\u0e08\u0e31\u0e14\u0e2a\u0e23\u0e23:</strong> ' + escapeHtmlSafe(allocatedQty) + '</div>'
+            + '<div><strong>\u0e40\u0e1a\u0e34\u0e01\u0e41\u0e25\u0e49\u0e27:</strong> ' + escapeHtmlSafe(usedQty) + '</div>'
+            + '<div><strong>\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d:</strong> ' + escapeHtmlSafe(remainingQty) + '</div>'
+            + '</div>'
+          : '')
       + '    </div>'
       + '    <div class="budget-summary">'
       + '      <div class="summary-row"><span>\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13</span><span class="amount-budget">' + fmtCurrency(item.budget) + '</span></div>'

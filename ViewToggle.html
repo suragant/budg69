@@ -476,37 +476,6 @@
   };
 
   /* ── wrap displayData เพื่อ re-show ปุ่มโอนงบหลัง reload ─── */
-  function wrapDisplayData() {
-    if (typeof window.displayData !== 'function' || window.displayData.__vtWrapped2) return;
-    var orig = window.displayData;
-    window.displayData = function (payload) {
-      var result = orig.apply(this, arguments);
-      try {
-        if (typeof window._initViewToggle === 'function') window._initViewToggle();
-      } catch (e) {}
-      // Keep transfer button visible for every role except viewer.
-      try {
-        var user = payload && payload.user;
-        var transferBtn = document.getElementById('transferBudgetBtn');
-        if (transferBtn && user) {
-          transferBtn.style.display = (user.role === 'viewer') ? 'none' : 'inline-flex';
-        }
-      } catch (e) {}
-      return result;
-    };
-    window.displayData.__vtWrapped2 = true;
-  }
-
-  if (typeof window.displayData === 'function') {
-    wrapDisplayData();
-  } else {
-    var att = 0, wTid = setInterval(function () {
-      att++;
-      if (typeof window.displayData === 'function') { wrapDisplayData(); clearInterval(wTid); }
-      if (att > 100) clearInterval(wTid);
-    }, 100);
-  }
-
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', window._initViewToggle);
   else window._initViewToggle();
 
