@@ -1,27 +1,6 @@
 ﻿// Code.gs - Main Backend Script (Improved & Optimized & Secured)
 // Last Updated: 2026-03-19
 
-// ==================== CONFIGURATION ====================
-const CONFIG = {
-  ITEM_ID_PREFIX: 'BG69-',
-  ITEM_ID_LENGTH: 3,
-  SHEETS: {
-    BUDGET: 'Budget',
-    USERS: 'Users',
-    TRANSACTION_LOG: 'Transaction_Log',
-    ERROR_LOG: 'Error_Log'
-  },
-  ADMIN_EMAIL: 'admin@example.com',
-  ALERT_THRESHOLD: {
-    critical: 95,
-    high: 90,
-    medium: 80
-  },
-  TIMEZONE: 'Asia/Bangkok',
-  LOCK_TIMEOUT_MS: 5000,
-  MAX_LOCK_RETRIES: 3
-};
-
 // ==================== CACHE ====================
 let SS_CACHE = null;
 
@@ -42,43 +21,6 @@ function resolveSheet(ref) {
     return ss.getSheetByName(ref) || null;
   }
   return null;
-}
-
-// ==================== ERROR LOGGING ====================
-
-function logErrorToSheet(errorObj) {
-  try {
-    const ss = getSpreadsheet();
-    let errorLogSheet = resolveSheet(CONFIG.SHEETS.ERROR_LOG);
-    if (!errorLogSheet) {
-      errorLogSheet = ss.insertSheet(CONFIG.SHEETS.ERROR_LOG);
-      errorLogSheet.appendRow(['Timestamp','User Email','Function','Error Message','Stack Trace','Context']);
-    }
-    errorLogSheet.appendRow([
-      new Date(),
-      getUserEmail() || 'system',
-      errorObj.functionName || 'unknown',
-      errorObj.message || '',
-      errorObj.stack || '',
-      JSON.stringify(errorObj.context || {})
-    ]);
-  } catch (e) {
-    Logger.log('Error logging failed: ' + e.toString());
-  }
-}
-
-function handleError(functionName, error, context = {}) {
-  const errorDetails = {
-    functionName,
-    message: error?.message || error?.toString() || 'Unknown error',
-    stack: error?.stack || '',
-    timestamp: new Date().toISOString(),
-    userId: getUserEmail(),
-    context
-  };
-  Logger.log(JSON.stringify(errorDetails));
-  logErrorToSheet(errorDetails);
-  return errorDetails;
 }
 
 // ==================== HEADER / COLUMN HELPERS ====================
@@ -312,63 +254,6 @@ function sanitizeHtmlForPDF(html) {
       .replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
   } catch (e) {
     return html;
-  }
-}
-
-// ==================== WEB APP ====================
-
-function doGet(e) {
-  try {
-    const page = (e && e.parameter && e.parameter.page)
-      ? String(e.parameter.page).toLowerCase().trim() : '';
-    const templateName = (page === 'support') ? 'SupportIndex' : 'Index';
-    return HtmlService.createTemplateFromFile(templateName)
-      .evaluate()
-      .setTitle('ระบบสารสนเทศในการบริหารงบประมาณ')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-  } catch (err) {
-    handleError('doGet', err, { page: e?.parameter?.page });
-    try { return HtmlService.createTemplateFromFile('Index').evaluate(); } catch (e) {}
-    return HtmlService.createHtmlOutput('Error: ' + (err.message || err.toString()));
-  }
-}
-
-function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
-}
-
-// ==================== USER MANAGEMENT ====================
-
-function getUserEmail() {
-  try { return Session.getActiveUser().getEmail(); } catch (e) { return ''; }
-}
-
-function getUserPermission() {
-  try {
-    const email = (Session.getActiveUser().getEmail() || '').toString().trim().toLowerCase();
-    const ss = getSpreadsheet();
-    let usersSheet = resolveSheet(CONFIG.SHEETS.USERS);
-    if (!usersSheet) {
-      usersSheet = ss.insertSheet(CONFIG.SHEETS.USERS);
-      usersSheet.appendRow(['Email', 'เธชเธณเธเธฑเธ/เธเธญเธ', 'Role']);
-      return null;
-    }
-    const data = usersSheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) {
-      if ((data[i][0] || '').toString().trim().toLowerCase() === email) {
-        return {
-          email: (data[i][0] || '').toString().trim(),
-          department: (data[i][1] || '').toString().trim(),
-          role: normalizeRoleValue(data[i][2]),
-          rawRole: (data[i][2] || '').toString().trim()
-        };
-      }
-    }
-    return null;
-  } catch (error) {
-    handleError('getUserPermission', error);
-    return null;
   }
 }
 
