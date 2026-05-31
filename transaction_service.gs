@@ -27,13 +27,7 @@ function recordExpense(itemId, amount, description, expenseDate) {
   const normalizedItemId = normalizeItemId(String(itemId).trim());
   if (!normalizedItemId) return createResponse(false, 'เนเธกเนเธชเธฒเธกเธฒเธฃเธ– normalize Item ID เนเธ”เน');
 
-  let parsedDate = null;
-  if (expenseDate) {
-    try {
-      parsedDate = (expenseDate instanceof Date) ? expenseDate : new Date(expenseDate);
-      if (isNaN(parsedDate.getTime())) parsedDate = null;
-    } catch (e) { parsedDate = null; }
-  }
+  const parsedDate = normalizeDateInput(expenseDate);
 
   const lock = acquireLockWithRetry();
   if (!lock) return createResponse(false, 'เธฃเธฐเธเธเธเธณเธฅเธฑเธเธเธฃเธฑเธเธเธฃเธธเธเธเนเธญเธกเธนเธฅ เธเธฃเธธเธ“เธฒเธฅเธญเธเนเธซเธกเนเธญเธตเธเธเธฃเธฑเนเธ');
@@ -139,13 +133,9 @@ function transferBudget(fromItemId, toItemId, amount, reason) {
       return createResponse(false, 'เนเธกเนเธเธเธเธญเธฅเธฑเธกเธเนเธ—เธตเนเธเธณเน€เธเนเธ');
     }
 
-    let fromRow = null, toRow = null;
-    for (let i = 1; i < allData.length; i++) {
-      const cellId = normalizeItemId((allData[i][cols.itemId] || '').toString());
-      if (fromRow === null && cellId.toUpperCase() === normFrom.toUpperCase()) fromRow = i + 1;
-      if (toRow   === null && cellId.toUpperCase() === normTo.toUpperCase())   toRow   = i + 1;
-      if (fromRow !== null && toRow !== null) break;
-    }
+    const foundRows = findBudgetRowIndicesByItemIds([normFrom, normTo], allData, cols);
+    const fromRow = foundRows[normFrom.toUpperCase()];
+    const toRow = foundRows[normTo.toUpperCase()];
 
     if (!fromRow) return createResponse(false, 'เนเธกเนเธเธ Item ID เธ•เนเธเธ—เธฒเธ: '  + normFrom);
     if (!toRow)   return createResponse(false, 'เนเธกเนเธเธ Item ID เธเธฅเธฒเธขเธ—เธฒเธ: ' + normTo);
@@ -220,14 +210,6 @@ function transferBudget(fromItemId, toItemId, amount, reason) {
   }
 }
 
-function normalizeDateForSheet(dateInput) {
-  if (!dateInput) return null;
-  try {
-    const dt = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
-    return isNaN(dt.getTime()) ? null : dt;
-  } catch (e) { return null; }
-}
-
 function logTransaction(itemId, amount, description, expenseDate, newUsed, newRemaining, type, quantity, status, editedBy) {
   try {
     const ss = getSpreadsheet();
@@ -243,7 +225,7 @@ function logTransaction(itemId, amount, description, expenseDate, newUsed, newRe
     }
     logSheet.appendRow([
       new Date(),
-      normalizeDateForSheet(expenseDate),
+      normalizeDateInput(expenseDate),
       getUserEmail(),
       normalizeItemId(itemId),
       Number(amount || 0) || 0,
@@ -378,10 +360,8 @@ function cancelExpense(logRowIndex, reason) {
     const cols    = getColumnIndices(allData[0]);
     if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'เนเธกเนเธเธเธเธญเธฅเธฑเธกเธเนเธ—เธตเนเธเธณเน€เธเนเธ');
 
-    let budgetRow = null;
-    for (let i = 1; i < allData.length; i++) {
-      if (normalizeItemId((allData[i][cols.itemId]||'')+'').toUpperCase() === itemId.toUpperCase()) { budgetRow = i+1; break; }
-    }
+    const foundRows = findBudgetRowIndicesByItemIds([itemId], allData, cols);
+    const budgetRow = foundRows[itemId.toUpperCase()];
     if (!budgetRow) return createResponse(false, 'เนเธกเนเธเธ Item ID: ' + itemId);
 
     const budgetRowData = allData[budgetRow - 1];
@@ -478,10 +458,8 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
     const cols    = getColumnIndices(allData[0]);
     if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'เนเธกเนเธเธเธเธญเธฅเธฑเธกเธเนเธ—เธตเนเธเธณเน€เธเนเธ');
 
-    let budgetRow = null;
-    for (let i = 1; i < allData.length; i++) {
-      if (normalizeItemId((allData[i][cols.itemId]||'')+'').toUpperCase() === itemId.toUpperCase()) { budgetRow = i+1; break; }
-    }
+    const foundRows = findBudgetRowIndicesByItemIds([itemId], allData, cols);
+    const budgetRow = foundRows[itemId.toUpperCase()];
     if (!budgetRow) return createResponse(false, 'เนเธกเนเธเธ Item ID: ' + itemId);
 
     const budgetRowData = allData[budgetRow - 1];
@@ -506,13 +484,7 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
     if (logCols.status   !== -1) logSheet.getRange(logRowIndex, logCols.status   + 1).setValue('EDITED');
     if (logCols.editedBy !== -1) logSheet.getRange(logRowIndex, logCols.editedBy + 1).setValue(currentUser.email);
 
-    let parsedDate = null;
-    if (newExpenseDate) {
-      try {
-        parsedDate = (newExpenseDate instanceof Date) ? newExpenseDate : new Date(newExpenseDate);
-        if (isNaN(parsedDate.getTime())) parsedDate = null;
-      } catch (e) { parsedDate = null; }
-    }
+    const parsedDate = normalizeDateInput(newExpenseDate);
 
     const originalDesc = (logRow[5] || '') + '';
     const finalDesc = newDescription || originalDesc;

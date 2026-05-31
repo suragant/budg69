@@ -100,44 +100,93 @@ function normalizeItemId(id) {
   return idStr.toUpperCase();
 }
 
-function findRowIndexByItemId(itemId) {
-  const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-  if (!budgetSheet) return null;
-  const data = budgetSheet.getDataRange().getValues();
-  if (!data || data.length < 2) return null;
-  const cols = getColumnIndices(data[0]);
-  const idColIndex = cols.itemId >= 0 ? cols.itemId : 0;
-  const searchNorm = normalizeItemId((itemId || '').toString().trim());
-  if (!searchNorm) return null;
+function getItemIdTrailingNumber(value) {
+  const match = String(value || '').match(/(\d+)\s*$/);
+  return match ? parseInt(match[1], 10) : null;
+}
 
-  function trailingNumber(s) {
-    const m = String(s || '').match(/(\d+)\s*$/);
-    return m ? parseInt(m[1], 10) : null;
+function getItemIdPrefix(value) {
+  return String(value || '').replace(/[\-\s]*\d+\s*$/, '').trim().toUpperCase();
+}
+
+function itemIdsMatch(cellValue, itemId) {
+  const searchRaw = String(itemId || '').trim();
+  const cellRaw = String(cellValue || '').trim();
+  if (!searchRaw || !cellRaw) return false;
+
+  const searchNorm = normalizeItemId(searchRaw);
+  const cellNorm = normalizeItemId(cellRaw);
+  if (searchNorm && cellNorm && cellNorm.toUpperCase() === searchNorm.toUpperCase()) {
+    return true;
   }
 
-  function prefixBefore(s) {
-    return String(s || '').replace(/[\-\s]*\d+\s*$/, '').trim().toUpperCase();
+  const searchTrailing = getItemIdTrailingNumber(searchRaw);
+  const cellTrailing = getItemIdTrailingNumber(cellRaw);
+  if (searchTrailing !== null && cellTrailing !== null) {
+    const searchPrefix = getItemIdPrefix(searchRaw);
+    const cellPrefix = getItemIdPrefix(cellRaw);
+    if (searchPrefix) {
+      return cellPrefix === searchPrefix && Number(cellTrailing) === Number(searchTrailing);
+    }
+    return Number(cellTrailing) === Number(searchTrailing);
   }
 
-  const searchTrailing = trailingNumber(itemId);
-  const searchPrefix = prefixBefore(itemId);
+  return cellRaw.toUpperCase() === searchRaw.toUpperCase();
+}
 
-  for (let i = 1; i < data.length; i++) {
-    const cellVal = (data[i][idColIndex] || '').toString().trim();
+function findBudgetRowIndicesByItemIds(itemIds, data, cols) {
+  const searchIds = Array.isArray(itemIds) ? itemIds : [itemIds];
+  const targets = searchIds
+    .map(id => normalizeItemId((id || '').toString().trim()))
+    .filter(Boolean);
+  const found = {};
+
+  targets.forEach(target => {
+    found[target.toUpperCase()] = null;
+  });
+  if (!targets.length) return found;
+
+  const budgetData = data || (function() {
+    const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
+    return budgetSheet ? budgetSheet.getDataRange().getValues() : [];
+  })();
+  if (!budgetData || budgetData.length < 2) return found;
+
+  const columnMap = cols || getColumnIndices(budgetData[0]);
+  const idColIndex = columnMap.itemId >= 0 ? columnMap.itemId : 0;
+
+  for (let i = 1; i < budgetData.length; i++) {
+    const cellVal = (budgetData[i][idColIndex] || '').toString().trim();
     if (!cellVal) continue;
-    const cellNorm = normalizeItemId(cellVal);
-    if (cellNorm.toUpperCase() === searchNorm.toUpperCase()) return i + 1;
-    const cellTrailing = trailingNumber(cellVal);
-    if (searchTrailing !== null && cellTrailing !== null) {
-      const cellPrefix = prefixBefore(cellVal);
-      if (searchPrefix) {
-        if (cellPrefix === searchPrefix && Number(cellTrailing) === Number(searchTrailing)) return i + 1;
-      } else {
-        if (Number(cellTrailing) === Number(searchTrailing)) return i + 1;
+
+    for (let j = 0; j < targets.length; j++) {
+      const target = targets[j];
+      const targetKey = target.toUpperCase();
+      if (found[targetKey]) continue;
+      if (itemIdsMatch(cellVal, target)) {
+        found[targetKey] = i + 1;
       }
     }
   }
-  return null;
+
+  return found;
+}
+
+function findRowIndexByItemId(itemId) {
+  const normalized = normalizeItemId((itemId || '').toString().trim());
+  if (!normalized) return null;
+  const found = findBudgetRowIndicesByItemIds([normalized]);
+  return found[normalized.toUpperCase()] || null;
+}
+
+function normalizeDateInput(dateInput) {
+  if (!dateInput) return null;
+  try {
+    const dt = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+    return isNaN(dt.getTime()) ? null : dt;
+  } catch (e) {
+    return null;
+  }
 }
 
 function createResponse(success, message = '', data = {}) {
