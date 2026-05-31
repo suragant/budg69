@@ -1,6 +1,18 @@
 // transaction_service.gs
 // Expense, transfer, and transaction log service functions.
 
+function validateExpenseInput(itemId, amount, expenseDate) {
+  const errors = [];
+  if (!itemId || !String(itemId).trim()) errors.push('เธฃเธซเธฑเธชเธฃเธฒเธขเธเธฒเธฃ (Item ID) เนเธกเนเนเธ”เนเธฃเธฐเธเธธ');
+  const amt = parseFloat(String(amount || '').replace(/[^\d\.\-]/g, '')) || 0;
+  if (isNaN(amt) || amt <= 0) errors.push('เธเธณเธเธงเธเน€เธเธดเธเธ•เนเธญเธเธกเธฒเธเธเธงเนเธฒ 0');
+  if (expenseDate) {
+    const dt = (expenseDate instanceof Date) ? expenseDate : new Date(expenseDate);
+    if (isNaN(dt.getTime())) errors.push('เธฃเธนเธเนเธเธเธงเธฑเธเธ—เธตเนเนเธกเนเธ–เธนเธเธ•เนเธญเธ');
+  }
+  return { valid: errors.length === 0, errors, sanitizedAmount: amt };
+}
+
 function recordExpense(itemId, amount, description, expenseDate) {
   const startTime  = new Date();
   const currentUser = getUserPermission();
