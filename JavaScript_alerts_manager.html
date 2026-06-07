@@ -221,34 +221,27 @@
       }
 
       // then refresh from server (best-effort)
-      if (window.google && google.script && typeof google.script.run === 'object') {
-        try {
-          google.script.run
-            .withSuccessHandler(function(res){
-              try {
-                var alerts = [];
-                if (!res) {}
-                else if (res.success && Array.isArray(res.alerts)) alerts = res.alerts;
-                else if (Array.isArray(res)) alerts = res;
-                else if (res.data && Array.isArray(res.data.alerts)) alerts = res.data.alerts;
+      try {
+        window.rpcWithRetry('checkBudgetAlerts', []).then(function(res){
+          try {
+            var alerts = [];
+            if (!res) {}
+            else if (res.success && Array.isArray(res.alerts)) alerts = res.alerts;
+            else if (Array.isArray(res)) alerts = res;
+            else if (res.data && Array.isArray(res.data.alerts)) alerts = res.data.alerts;
 
-                if (alerts && alerts.length >= 0) {
-                  try { window.State = window.State || {}; window.State.budgetAlerts = alerts; } catch(e){}
-                  renderAlertsInto(container, alerts);
-                } else {
-                  if (container && container.innerHTML.trim() === '') container.innerHTML = '<div style="color:#666">ไม่มีการแจ้งเตือน</div>';
-                }
-              } catch(e) { console.error('openAlertsModal.successHandler error', e); }
-            })
-            .withFailureHandler(function(err){
-              try { if (container) container.innerHTML = '<div style="color:#a00">โหลดแจ้งเตือนไม่สำเร็จ (ดู console)</div>'; console.warn('checkBudgetAlerts failed', err); } catch(e){}
-            })
-            .checkBudgetAlerts();
-        } catch (e) {
-          console.warn('openAlertsModal google.script.run call failed', e);
-        }
-      } else {
-        if (container && container.innerHTML.trim() === '') container.innerHTML = '<div style="color:#666">ไม่สามารถเรียก server เพื่อโหลดแจ้งเตือนได้</div>';
+            if (alerts && alerts.length >= 0) {
+              try { window.State = window.State || {}; window.State.budgetAlerts = alerts; } catch(e){}
+              renderAlertsInto(container, alerts);
+            } else {
+              if (container && container.innerHTML.trim() === '') container.innerHTML = '<div style="color:#666">ไม่มีการแจ้งเตือน</div>';
+            }
+          } catch(e) { console.error('openAlertsModal.successHandler error', e); }
+        }).catch(function(err){
+          try { if (container) container.innerHTML = '<div style="color:#a00">โหลดแจ้งเตือนไม่สำเร็จ (ดู console)</div>'; console.warn('checkBudgetAlerts failed', err); } catch(e){}
+        });
+      } catch (e) {
+        console.warn('openAlertsModal rpcWithRetry call failed', e);
       }
       try { window.__alerts_ui_showing = true; } catch(_) {}
     } catch(e) {

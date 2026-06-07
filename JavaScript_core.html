@@ -30,52 +30,7 @@
   }
 
   function callServer(fnName, args) {
-    args = Array.isArray(args) ? args : [];
-
-    if (typeof window.rpcWithRetry === 'function') {
-      try { return window.rpcWithRetry(fnName, args); } catch (e) {}
-    }
-
-    return new Promise(function(resolve, reject){
-      try {
-        if (!(window.google && google.script && google.script.run)) {
-          reject(new Error('google.script.run not available'));
-          return;
-        }
-        var runner = google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject);
-        if (!runner || typeof runner[fnName] !== 'function') {
-          reject(new Error('RPC method not found: ' + fnName));
-          return;
-        }
-        runner[fnName].apply(runner, args);
-      } catch (e) {
-        reject(e);
-      }
-    });
-  }
-
-  function callServerDirect(fnName, args) {
-    args = Array.isArray(args) ? args : [];
-    return new Promise(function(resolve, reject){
-      try {
-        if (!(window.google && google.script && google.script.run)) {
-          reject(new Error('google.script.run not available'));
-          return;
-        }
-        var runner = google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject);
-        if (!runner || typeof runner[fnName] !== 'function') {
-          reject(new Error('RPC method not found: ' + fnName));
-          return;
-        }
-        runner[fnName].apply(runner, args);
-      } catch (e) {
-        reject(e);
-      }
-    });
+    return window.rpcWithRetry(fnName, args || []);
   }
 
   window.__wd_record_dedupe = window.__wd_record_dedupe || { lastCalls: {}, ttl: 3000 };
@@ -275,7 +230,7 @@
     if (typeof window.setBudgetLoading === 'function') window.setBudgetLoading(true);
     if (typeof window.setBudgetError === 'function') window.setBudgetError('');
 
-    return callServerDirect('getInitialData', [])
+    return callServer('getInitialData', [])
       .catch(function(primaryErr){
         console.warn('Direct getInitialData failed, falling back', primaryErr);
         return callServer('getInitialData', []);

@@ -149,35 +149,7 @@
   // Server call helper
   // ----------------------------
   function callServer(fnName, args) {
-    args = args || [];
-    if (typeof window.rpcWithRetry === 'function') {
-      try { return Promise.resolve(window.rpcWithRetry(fnName, args)); } catch (e) { console.warn('callServer: rpcWithRetry failed', e); }
-    }
-    if (typeof window.wd_call === 'function') {
-      try { return Promise.resolve(window.wd_call(fnName, args)); } catch (e) { console.warn('callServer: wd_call failed', e); }
-    }
-    if (typeof window.enqueueRpc === 'function') {
-      try {
-        return window.enqueueRpc(function(){
-          return new Promise(function(resolve, reject){
-            try {
-              if (!window.google || !google.script || !google.script.run) return reject(new Error('google.script.run not available'));
-              var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-              if (!runner || typeof runner[fnName] !== 'function') return reject(new Error('RPC method not found: ' + fnName));
-              runner[fnName].apply(runner, args || []);
-            } catch(err){ reject(err); }
-          });
-        });
-      } catch(e){ console.warn('callServer: enqueueRpc failed', e); }
-    }
-    return new Promise(function(resolve, reject){
-      try {
-        if (!(window.google && google.script && google.script.run)) return reject(new Error('No RPC available'));
-        var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-        if (!runner || typeof runner[fnName] !== 'function') return reject(new Error('RPC method not found: ' + fnName));
-        runner[fnName].apply(runner, args || []);
-      } catch (err) { reject(err); }
-    });
+    return window.rpcWithRetry(fnName, args || []);
   }
 
   // Provide a robust global handler invoked by inline onclick attributes

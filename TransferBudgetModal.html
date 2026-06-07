@@ -428,24 +428,14 @@
     _setBtnLoading(true);
     _hideError();
 
-    if (window.google && google.script && google.script.run) {
-      google.script.run
-        .withSuccessHandler(function (res) {
-          _setBtnLoading(false);
-          if (res && res.success) _showSuccess(res, fromId, toId, amt);
-          else _showError((res && res.message) || 'เกิดข้อผิดพลาด');
-        })
-        .withFailureHandler(function (err) {
-          _setBtnLoading(false);
-          _showError(String(err));
-        })
-        .transferBudget(fromId, toId, amt, reason);
-    } else {
-      setTimeout(function () {
-        _setBtnLoading(false);
-        _showSuccess({ message: 'โอนงบสำเร็จ (demo)' }, fromId, toId, amt);
-      }, 1200);
-    }
+    window.rpcWithRetry('transferBudget', [fromId, toId, amt, reason]).then(function (res) {
+      _setBtnLoading(false);
+      if (res && res.success) _showSuccess(res, fromId, toId, amt);
+      else _showError((res && res.message) || 'เกิดข้อผิดพลาด');
+    }).catch(function (err) {
+      _setBtnLoading(false);
+      _showError(String(err));
+    });
   });
 
   /* ── success ──────────────────────────────────────────────── */

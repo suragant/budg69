@@ -127,19 +127,9 @@
 
       // Promise that performs the server call
       var callPromise;
-      if (rpc) {
-        try {
-          callPromise = Promise.resolve(rpc(normalizedId, aVal, noteVal, today, qVal));
-        } catch(e) {
-          callPromise = Promise.reject(e);
-        }
-      } else if (window.google && google.script && google.script.run && typeof google.script.run.recordSupportExpenseSupport === 'function') {
-        callPromise = new Promise(function(resolve, reject){
-          try {
-            google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).recordSupportExpenseSupport(normalizedId, aVal, noteVal, today, qVal);
-          } catch(err){ reject(err); }
-        });
-      } else {
+      try {
+        callPromise = Promise.resolve(window.rpcRecordSupportExpense(normalizedId, aVal, noteVal, today, qVal));
+      } catch(e) {
         callPromise = Promise.resolve({ success:false, message: 'No RPC available' });
       }
 

@@ -40,17 +40,14 @@
           return;
         }
 
-        if (root.google && google.script && google.script.run && isFn(root.renderWorkExpenseTypes)) {
-          google.script.run
-            .withSuccessHandler(function(res) {
-              if (res && res.success && Array.isArray(res.detailedData)) {
-                root.renderWorkExpenseTypes(workName, res.detailedData);
-              }
-            })
-            .withFailureHandler(function(err) {
-              console.warn('showWorkExpenseTypes shim failed', err);
-            })
-            .getWorkDetails(workName);
+        if (isFn(root.renderWorkExpenseTypes)) {
+          window.rpcWithRetry('getWorkDetails', [workName]).then(function(res) {
+            if (res && res.success && Array.isArray(res.detailedData)) {
+              root.renderWorkExpenseTypes(workName, res.detailedData);
+            }
+          }).catch(function(err) {
+            console.warn('showWorkExpenseTypes shim failed', err);
+          });
         }
       } catch (e) {
         console.warn('installShowWorkExpenseTypesShim error', e);

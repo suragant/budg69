@@ -236,32 +236,28 @@
               var fiscalEl = document.getElementById('supportFiscal');
               var year = yearEl ? Number(yearEl.value) : (new Date()).getFullYear();
               var fiscal = fiscalEl ? Number(fiscalEl.value) : 10;
-              if (window.google && google.script && typeof google.script.run === 'object') {
-                exportBtn.disabled = true;
-                var origText = exportBtn.innerHTML;
-                exportBtn.innerHTML = 'กำลังสร้าง PDF...';
-                google.script.run
-                  .withSuccessHandler(function(res){
-                    exportBtn.disabled = false;
-                    exportBtn.innerHTML = origText;
-                    if (!res || !res.success) return alert('สร้าง PDF ไม่สำเร็จ: ' + (res && res.message || 'Unknown'));
-                    var b64 = res.data && res.data.base64;
-                    if (!b64) return alert('server ไม่ส่งข้อมูล PDF');
-                    var dataUrl = 'data:application/pdf;base64,' + b64;
-                    fetch(dataUrl).then(function(r){ return r.blob(); }).then(function(blob){
-                      var url = URL.createObjectURL(blob);
-                      window.open(url, '_blank');
-                      setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 60*1000);
-                    }).catch(function(err){ console.error('blob creation failed', err); try{ window.open('data:application/pdf;base64,'+b64, '_blank'); }catch(e){ alert('ไม่สามารถเปิดไฟล์ PDF ได้'); }});
-                  })
-                  .withFailureHandler(function(err){
-                    exportBtn.disabled = false;
-                    exportBtn.innerHTML = origText;
-                    console.error('export failed', err);
-                    alert('เกิดข้อผิดพลาดขณะสร้าง PDF (ดู console)');
-                  })
-                  .exportSupportReportPdf_inline('monthly', { year: year, fiscalStartMonth: fiscal, includeLogo: false, fileName: 'Support_' + year });
-                return;
+              exportBtn.disabled = true;
+              var origText = exportBtn.innerHTML;
+              exportBtn.innerHTML = 'กำลังสร้าง PDF...';
+              window.rpcWithRetry('exportSupportReportPdf_inline', ['monthly', { year: year, fiscalStartMonth: fiscal, includeLogo: false, fileName: 'Support_' + year }]).then(function(res){
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = origText;
+                if (!res || !res.success) return alert('สร้าง PDF ไม่สำเร็จ: ' + (res && res.message || 'Unknown'));
+                var b64 = res.data && res.data.base64;
+                if (!b64) return alert('server ไม่ส่งข้อมูล PDF');
+                var dataUrl = 'data:application/pdf;base64,' + b64;
+                fetch(dataUrl).then(function(r){ return r.blob(); }).then(function(blob){
+                  var url = URL.createObjectURL(blob);
+                  window.open(url, '_blank');
+                  setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 60*1000);
+                }).catch(function(err){ console.error('blob creation failed', err); try{ window.open('data:application/pdf;base64,'+b64, '_blank'); }catch(e){ alert('ไม่สามารถเปิดไฟล์ PDF ได้'); }});
+              }).catch(function(err){
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = origText;
+                console.error('export failed', err);
+                alert('เกิดข้อผิดพลาดขณะสร้าง PDF (ดู console)');
+              });
+              return;
               }
 
               console.warn('No export mechanism available');

@@ -486,24 +486,7 @@
     return text;
   }
   function callExpenseRpc(fnName, args) {
-    args = Array.isArray(args) ? args : [];
-    if (typeof window.rpcWithRetry === 'function') return window.rpcWithRetry(fnName, args);
-    return new Promise(function(resolve, reject) {
-      try {
-        if (!(window.google && google.script && google.script.run)) {
-          reject(new Error('google.script.run not available'));
-          return;
-        }
-        var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-        if (!runner || typeof runner[fnName] !== 'function') {
-          reject(new Error('RPC method not found: ' + fnName));
-          return;
-        }
-        runner[fnName].apply(runner, args);
-      } catch (e) {
-        reject(e);
-      }
-    });
+    return window.rpcWithRetry(fnName, args || []);
   }
 
   window.showHistory = function (history, currentUserEmail) {
@@ -710,12 +693,10 @@
     var historyModal = $('historyModal');
     if (historyModal && (historyModal.classList.contains('active') || historyModal.style.display !== 'none')) {
       var itemId = window.State && window.State.selectedItem && (window.State.selectedItem.itemId || window.State.selectedItem.rowIndex);
-      if (itemId && typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler(function (h) {
-            if (typeof window.showHistory === 'function') window.showHistory(h);
-          })
-          .getTransactionHistory(itemId);
+      if (itemId) {
+        window.rpcWithRetry('getTransactionHistory', [itemId]).then(function (h) {
+          if (typeof window.showHistory === 'function') window.showHistory(h);
+        });
       }
     }
   }

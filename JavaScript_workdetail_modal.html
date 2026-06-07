@@ -84,43 +84,35 @@
   }
 
   function fallbackLoadWorkDetails(workName) {
-    if (!(window.google && google.script && google.script.run)) {
-      renderFallbackMessage('ไม่สามารถโหลดรายละเอียดได้ในขณะนี้');
-      return;
-    }
-
-    google.script.run
-      .withSuccessHandler(function(res){
-        try {
-          if (!res || !res.success) {
-            if (typeof window.closeModal === 'function') window.closeModal('workDetailModal');
-            if (typeof window.showCustomAlert === 'function') {
-              window.showCustomAlert('error', 'ไม่พบข้อมูล', (res && res.message) ? res.message : 'ไม่พบข้อมูล');
-            }
-            return;
+    window.rpcWithRetry('getWorkDetails', [workName]).then(function(res){
+      try {
+        if (!res || !res.success) {
+          if (typeof window.closeModal === 'function') window.closeModal('workDetailModal');
+          if (typeof window.showCustomAlert === 'function') {
+            window.showCustomAlert('error', 'ไม่พบข้อมูล', (res && res.message) ? res.message : 'ไม่พบข้อมูล');
           }
-
-          var detailed = res.detailedData || [];
-          window.State = window.State || {};
-          window.State.dashboardDetailedData = detailed;
-
-          if (typeof window.renderWorkExpenseTypes === 'function') {
-            window.renderWorkExpenseTypes(workName, detailed);
-            return;
-          }
-
-          renderFallbackMessage('ไม่พบฟังก์ชัน renderWorkExpenseTypes');
-        } catch (e) {
-          console.error('fallbackLoadWorkDetails successHandler error', e);
+          return;
         }
-      })
-      .withFailureHandler(function(err){
-        if (typeof window.closeModal === 'function') window.closeModal('workDetailModal');
-        if (typeof window.showCustomAlert === 'function') {
-          window.showCustomAlert('error', 'เกิดข้อผิดพลาด', String(err));
+
+        var detailed = res.detailedData || [];
+        window.State = window.State || {};
+        window.State.dashboardDetailedData = detailed;
+
+        if (typeof window.renderWorkExpenseTypes === 'function') {
+          window.renderWorkExpenseTypes(workName, detailed);
+          return;
         }
-      })
-      .getWorkDetails(workName);
+
+        renderFallbackMessage('ไม่พบฟังก์ชัน renderWorkExpenseTypes');
+      } catch (e) {
+        console.error('fallbackLoadWorkDetails successHandler error', e);
+      }
+    }).catch(function(err){
+      if (typeof window.closeModal === 'function') window.closeModal('workDetailModal');
+      if (typeof window.showCustomAlert === 'function') {
+        window.showCustomAlert('error', 'เกิดข้อผิดพลาด', String(err));
+      }
+    });
   }
 
   var originalShow = typeof window.showWorkExpenseTypes === 'function' ? window.showWorkExpenseTypes : null;
