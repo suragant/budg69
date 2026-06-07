@@ -14,16 +14,6 @@
     try { return !!(el && el[flagName]); } catch (e) { return false; }
   }
 
-  function escapeHtml(value) {
-    var text = value == null ? '' : String(value);
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
   function ensurePdfLibs() {
     if (window.__pdfLibsPromise) return window.__pdfLibsPromise;
 
@@ -231,10 +221,10 @@
     header.style.textAlign = 'center';
     header.style.marginBottom = '18px';
     header.innerHTML =
-      '<div style="font-size:24px;font-weight:700;margin-bottom:6px;">' + escapeHtml(title) + '</div>'
-      + '<div style="font-size:13px;color:#555;margin-bottom:4px;">พิมพ์เมื่อ: ' + escapeHtml(new Date().toLocaleString('th-TH')) + '</div>'
-      + '<div style="font-size:13px;color:#555;">ผู้ใช้งาน: ' + escapeHtml(userText) + '</div>'
-      + '<div style="font-size:15px;font-weight:600;margin-top:12px;text-align:left;color:#222;">' + escapeHtml(workTitle || '-') + '</div>';
+      '<div style="font-size:24px;font-weight:700;margin-bottom:6px;">' + window.escapeHtml(title) + '</div>'
+      + '<div style="font-size:13px;color:#555;margin-bottom:4px;">พิมพ์เมื่อ: ' + window.escapeHtml(new Date().toLocaleString('th-TH')) + '</div>'
+      + '<div style="font-size:13px;color:#555;">ผู้ใช้งาน: ' + window.escapeHtml(userText) + '</div>'
+      + '<div style="font-size:15px;font-weight:600;margin-top:12px;text-align:left;color:#222;">' + window.escapeHtml(workTitle || '-') + '</div>';
     return header;
   }
 
@@ -303,9 +293,9 @@
     wrapper.style.boxSizing = 'border-box';
     wrapper.innerHTML =
       '<div style="text-align:center;margin-bottom:18px;">'
-      + '  <div style="font-size:28px;font-weight:700;margin-bottom:6px;">' + escapeHtml(title) + '</div>'
-      + '  <div style="font-size:14px;color:#555;margin-bottom:4px;">พิมพ์เมื่อ: ' + escapeHtml(new Date().toLocaleString('th-TH')) + '</div>'
-      + '  <div style="font-size:14px;color:#555;">ผู้ใช้งาน: ' + escapeHtml(userText) + '</div>'
+      + '  <div style="font-size:28px;font-weight:700;margin-bottom:6px;">' + window.escapeHtml(title) + '</div>'
+      + '  <div style="font-size:14px;color:#555;margin-bottom:4px;">พิมพ์เมื่อ: ' + window.escapeHtml(new Date().toLocaleString('th-TH')) + '</div>'
+      + '  <div style="font-size:14px;color:#555;">ผู้ใช้งาน: ' + window.escapeHtml(userText) + '</div>'
       + '</div>';
 
     var builtTables = buildPaginatedWorkDetailTables(summaryTable);

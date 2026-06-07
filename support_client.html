@@ -98,18 +98,6 @@
 
   try { window.clientNormalizeItemId = window.clientNormalizeItemId || clientNormalizeItemId; } catch(e){}
 
-  function escapeText(value) {
-    try {
-      if (typeof window.escapeHtml === 'function') return window.escapeHtml(value);
-    } catch (e) {}
-    return String(value == null ? '' : value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
   function formatSupportMoney(value) {
     return (Number(value) || 0).toLocaleString('th-TH', {
       minimumFractionDigits: 2,
@@ -119,11 +107,11 @@
 
   function renderSupportContainerState(container, kind, message) {
     if (!container) return;
-    container.innerHTML = '<div class="support-inline-state support-inline-state-' + escapeText(kind || 'info') + '">' + escapeText(message || '') + '</div>';
+    container.innerHTML = '<div class="support-inline-state support-inline-state-' + window.escapeHtml(kind || 'info') + '">' + window.escapeHtml(message || '') + '</div>';
   }
 
   function renderSupportActionButtons(itemId) {
-    var safeId = escapeText(itemId);
+    var safeId = window.escapeHtml(itemId);
     return ''
       + '<div class="support-fallback-actions">'
       + '<button class="btn btn-primary record-btn" data-id="' + safeId + '" onclick="window.__support_on_btn(\'' + safeId + '\', \'record\')">บันทึก</button>'
@@ -133,8 +121,8 @@
 
   function renderSupportFallbackCard(item) {
     item = item || {};
-    var itemId = escapeText(item.itemId || '');
-    var itemName = escapeText(item.item || '');
+    var itemId = window.escapeHtml(item.itemId || '');
+    var itemName = window.escapeHtml(item.item || '');
     return ''
       + '<article class="support-fallback-card budget-card" data-item-id="' + itemId + '">'
       + '<div class="support-fallback-card__main">'
