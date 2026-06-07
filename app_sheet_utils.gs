@@ -3,6 +3,10 @@
 
 let SS_CACHE = null;
 
+function _isValidIndex(idx) {
+  return typeof idx === 'number' && idx >= 0;
+}
+
 function getSpreadsheet() {
   if (!SS_CACHE) {
     SS_CACHE = SpreadsheetApp.getActiveSpreadsheet();
@@ -245,6 +249,50 @@ function findRowIndexByItemId(itemId) {
   if (!normalized) return null;
   const found = findBudgetRowIndicesByItemIds([normalized]);
   return found[normalized.toUpperCase()] || null;
+}
+
+function findRowIndexInSheet(sheetName, itemId, columnMapFn) {
+  const normalized = normalizeItemId((itemId || '').toString().trim());
+  if (!normalized) return null;
+  const sheet = resolveSheet(sheetName);
+  if (!sheet) return null;
+  const data = sheet.getDataRange().getValues();
+  if (!data || data.length < 2) return null;
+  const cols = (typeof columnMapFn === 'function') ? columnMapFn(data[0]) : getColumnIndices(data[0]);
+  const found = findBudgetRowIndicesByItemIds([normalized], data, cols);
+  return found[normalized.toUpperCase()] || null;
+}
+
+function mapBudgetRowToItem(row, cols, rowIndex) {
+  return {
+    itemId:      normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : ''),
+    rowIndex:    rowIndex,
+    department:  row[cols.department] || '',
+    work:        (cols.work        !== -1) ? (row[cols.work]        || '') : '',
+    budgetType:  (cols.budgetType  !== -1) ? (row[cols.budgetType]  || '') : '',
+    category:    (cols.category    !== -1) ? (row[cols.category]    || '') : '',
+    expenseType: (cols.expenseType !== -1) ? (row[cols.expenseType] || '') : '',
+    item:        (cols.item        !== -1) ? (row[cols.item]        || '') : '',
+    budget:    parseNumberSafe(row[cols.budget]),
+    used:      (cols.used      !== -1) ? parseNumberSafe(row[cols.used])      : 0,
+    remaining: (cols.remaining !== -1) ? parseNumberSafe(row[cols.remaining]) : 0
+  };
+}
+
+function computeBudgetAlertLevel(budget, used, remaining) {
+  const effective = (remaining <= 0 && budget > 0) ? Math.max(0, budget - used) : remaining;
+  const pct = budget > 0 ? (used / budget * 100) : 0;
+  let level = null, message = '';
+  if (effective <= 0) {
+    level = 'critical'; message = 'หมดงบแล้ว';
+  } else if (pct >= CONFIG.ALERT_THRESHOLD.critical) {
+    level = 'critical'; message = `ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${effective.toLocaleString('th-TH')} บาท)`;
+  } else if (pct >= CONFIG.ALERT_THRESHOLD.high) {
+    level = 'high';     message = `ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${effective.toLocaleString('th-TH')} บาท)`;
+  } else if (pct >= CONFIG.ALERT_THRESHOLD.medium) {
+    level = 'medium';   message = `ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${effective.toLocaleString('th-TH')} บาท)`;
+  }
+  return { level, message, percentage: +pct.toFixed(1), effective };
 }
 
 function normalizeDateInput(dateInput) {

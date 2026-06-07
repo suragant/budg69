@@ -10,9 +10,9 @@ function buildItemsFromAgg(year, fiscalStartMonth) {
   year = Number(year) || (new Date()).getFullYear();
   fiscalStartMonth = Number(fiscalStartMonth) || 10; // 1..12
 
-  var ss = SpreadsheetApp.getActive();
-  var aggSheet = ss.getSheetByName('Support_Agg');
-  var supportSheet = ss.getSheetByName('Support');
+  var ss = getSpreadsheet();
+  var aggSheet = resolveSheet('Support_Agg');
+  var supportSheet = resolveSheet('Support');
 
   // read raw agg rows (may be headerless)
   var aggRows = [];
@@ -90,20 +90,12 @@ function buildItemsFromAgg(year, fiscalStartMonth) {
       var sData = supportSheet.getDataRange().getValues();
       if (sData && sData.length > 0) {
         // find candidate columns (flexible detection)
-        var sHeaders = sData[0].map(function(h){ return (h||'').toString().trim().toLowerCase(); });
-        var findIdx = function(choices){
-          for (var k=0;k<choices.length;k++){
-            var name = choices[k].toString().toLowerCase();
-            var idx = sHeaders.indexOf(name);
-            if (idx !== -1) return idx;
-          }
-          return -1;
-        };
-        var colItemId = findIdx(['item id','itemid','id','รหัส','รหัสรายการ','item']);
+        var sHeaders = sData[0];
+        var colItemId = findHeaderIndex(sHeaders, ['item id','itemid','id','รหัส','รหัสรายการ','item']);
         if (colItemId === -1) colItemId = 0; // fallback to col A
-        var colItemName = findIdx(['item','item name','รายการ','description','detail']);
-        var colBudget = findIdx(['budget','งบประมาณ','งบประมาณจัดสรร','budgetmoney','budget_money']);
-        var colRemaining = findIdx(['remaining','balance','งบประมาณคงเหลือ']);
+        var colItemName = findHeaderIndex(sHeaders, ['item','item name','รายการ','description','detail']);
+        var colBudget = findHeaderIndex(sHeaders, ['budget','งบประมาณ','งบประมาณจัดสรร','budgetmoney','budget_money']);
+        var colRemaining = findHeaderIndex(sHeaders, ['remaining','balance','งบประมาณคงเหลือ']);
 
         // iterate support rows and insert missing items with zeros
         for (var r = 1; r < sData.length; r++) {

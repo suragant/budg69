@@ -21,19 +21,7 @@ function getBudgetItems() {
         if (!deptVal && !itemVal) return false;
         return hasAccessToRow(user, deptVal);
       })
-      .map(({ row, originalIndex }) => ({
-        itemId:      normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : ''),
-        rowIndex:    originalIndex,
-        department:  row[cols.department] || '',
-        work:        (cols.work        !== -1) ? (row[cols.work]        || '') : '',
-        budgetType:  (cols.budgetType  !== -1) ? (row[cols.budgetType]  || '') : '',
-        category:    (cols.category    !== -1) ? (row[cols.category]    || '') : '',
-        expenseType: (cols.expenseType !== -1) ? (row[cols.expenseType] || '') : '',
-        item:        (cols.item        !== -1) ? (row[cols.item]        || '') : '',
-        budget:    parseNumberSafe(row[cols.budget]),
-        used:      (cols.used      !== -1) ? parseNumberSafe(row[cols.used])      : 0,
-        remaining: (cols.remaining !== -1) ? parseNumberSafe(row[cols.remaining]) : 0
-      }));
+      .map(({ row, originalIndex }) => mapBudgetRowToItem(row, cols, originalIndex));
     return createResponse(true, '', { user, items });
   } catch (error) {
     handleError('getBudgetItems', error);
@@ -62,43 +50,17 @@ function getInitialData() {
       const itemVal = (cols.item !== -1) ? (row[cols.item] || '') : '';
       if (!dept && !itemVal) continue;
       if (!hasAccessToRow(user, dept)) continue;
-      const itemId = normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : '');
-      const budget    = parseNumberSafe(row[cols.budget]);
-      const used      = (cols.used      !== -1) ? parseNumberSafe(row[cols.used])      : 0;
-      const remaining = (cols.remaining !== -1) ? parseNumberSafe(row[cols.remaining]) : 0;
+      const item = mapBudgetRowToItem(row, cols, i + 1);
+      items.push(item);
 
-      items.push({
-        itemId,
-        rowIndex:    i + 1,
-        department:  dept,
-        work:        (cols.work        !== -1) ? (row[cols.work]        || '') : '',
-        budgetType:  (cols.budgetType  !== -1) ? (row[cols.budgetType]  || '') : '',
-        category:    (cols.category    !== -1) ? (row[cols.category]    || '') : '',
-        expenseType: (cols.expenseType !== -1) ? (row[cols.expenseType] || '') : '',
-        item:        (cols.item        !== -1) ? (row[cols.item]        || '') : '',
-        budget, used, remaining
-      });
-
-      const pct = budget > 0 ? (used / budget * 100) : 0;
-      const eff = (remaining <= 0 && budget > 0) ? Math.max(0, budget - used) : remaining;
-      let level = null, message = '';
-      if (eff <= 0) {
-        level = 'critical'; message = 'หมดงบแล้ว';
-      } else if (pct >= CONFIG.ALERT_THRESHOLD.critical) {
-        level = 'critical'; message = `ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${eff.toLocaleString('th-TH')} บาท)`;
-      } else if (pct >= CONFIG.ALERT_THRESHOLD.high) {
-        level = 'high';     message = `ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${eff.toLocaleString('th-TH')} บาท)`;
-      } else if (pct >= CONFIG.ALERT_THRESHOLD.medium) {
-        level = 'medium';   message = `ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${eff.toLocaleString('th-TH')} บาท)`;
-      }
-
-      if (level) {
+      const alert = computeBudgetAlertLevel(item.budget, item.used, item.remaining);
+      if (alert.level) {
         alerts.push({
-          itemId: String(itemId || '').trim(),
-          work:   (cols.work  !== -1) ? String(row[cols.work]  || 'ไม่ระบุ').trim() : 'ไม่ระบุ',
-          item:   (cols.item  !== -1) ? String(row[cols.item]  || 'ไม่ระบุ').trim() : 'ไม่ระบุ',
-          budget: +budget, used: +used, remaining: +eff,
-          percentage: +pct.toFixed(1), level, message
+          itemId: item.itemId,
+          work:   item.work || 'ไม่ระบุ',
+          item:   item.item || 'ไม่ระบุ',
+          budget: +item.budget, used: +item.used, remaining: +alert.effective,
+          percentage: alert.percentage, level: alert.level, message: alert.message
         });
       }
     }
@@ -172,14 +134,14 @@ function getDashboardData() {
       if (!hasAccessToRow(user, dept)) continue;
       const work = row[cols.work] || 'ไม่ระบุ';
       if (!workSummary[work]) workSummary[work] = { work, totalBudget:0, totalUsed:0, totalTransferIn:0, totalTransferOut:0, totalRemaining:0, items:0 };
-      const itemId = normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : '');
-      const transfer = transferTotals[itemId] || {};
-      workSummary[work].totalBudget    += parseNumberSafe(row[cols.budget]);
-      workSummary[work].totalUsed      += parseNumberSafe(row[cols.used]);
+      const item = mapBudgetRowToItem(row, cols, i + 1);
+      const transfer = transferTotals[item.itemId] || {};
+      workSummary[work].totalBudget     += item.budget;
+      workSummary[work].totalUsed       += item.used;
       workSummary[work].totalTransferIn += parseNumberSafe(transfer.transferIn || 0);
-      workSummary[work].totalTransferOut += parseNumberSafe(transfer.transferOut || 0);
-      workSummary[work].totalRemaining += parseNumberSafe(row[cols.remaining]);
-      workSummary[work].items          += 1;
+      workSummary[work].totalTransferOut+= parseNumberSafe(transfer.transferOut || 0);
+      workSummary[work].totalRemaining  += item.remaining;
+      workSummary[work].items           += 1;
     }
     return createResponse(true, '', { data: Object.values(workSummary), user });
   } catch (error) {
@@ -203,19 +165,19 @@ function getWorkDetails(workName) {
       const row  = data[i];
       const dept = row[cols.department] || '';
       if (!hasAccessToRow(user, dept) || row[cols.work] !== workName) continue;
-      const itemId = normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : '');
-      const transfer = transferTotals[itemId] || {};
+      const item = mapBudgetRowToItem(row, cols, i + 1);
+      const transfer = transferTotals[item.itemId] || {};
       detailedData.push({
-        work:        row[cols.work]        || 'ไม่ระบุ',
-        budgetType:  (cols.budgetType  !== -1) ? (row[cols.budgetType]  || 'ไม่ระบุ') : 'ไม่ระบุ',
-        category:    (cols.category    !== -1) ? (row[cols.category]    || 'ไม่ระบุ') : 'ไม่ระบุ',
-        expenseType: (cols.expenseType !== -1) ? (row[cols.expenseType] || 'ไม่ระบุ') : 'ไม่ระบุ',
-        item:        (cols.item        !== -1) ? (row[cols.item]        || 'ไม่ระบุ') : 'ไม่ระบุ',
-        budget:    parseNumberSafe(row[cols.budget]),
-        used:      parseNumberSafe(row[cols.used]),
-        transferIn: parseNumberSafe(transfer.transferIn || 0),
+        work:        item.work        || 'ไม่ระบุ',
+        budgetType:  item.budgetType  || 'ไม่ระบุ',
+        category:    item.category    || 'ไม่ระบุ',
+        expenseType: item.expenseType || 'ไม่ระบุ',
+        item:        item.item        || 'ไม่ระบุ',
+        budget:      item.budget,
+        used:        item.used,
+        transferIn:  parseNumberSafe(transfer.transferIn || 0),
         transferOut: parseNumberSafe(transfer.transferOut || 0),
-        remaining: parseNumberSafe(row[cols.remaining])
+        remaining:   item.remaining
       });
     }
     return createResponse(true, '', { detailedData });
@@ -239,23 +201,15 @@ function checkBudgetAlerts() {
       const row  = data[i];
       const dept = (cols.department != null) ? (row[cols.department] || '').toString().trim() : '';
       if (!hasAccessToRow(user, dept)) continue;
-      const budget    = parseNumberSafe(cols.budget    != null ? row[cols.budget]    : 0);
-      const used      = parseNumberSafe(cols.used      != null ? row[cols.used]      : 0);
-      let remaining   = parseNumberSafe(cols.remaining != null ? row[cols.remaining] : 0);
-      if (remaining === 0 && budget > 0) remaining = Math.max(0, budget - used);
-      const pct = budget > 0 ? (used / budget * 100) : 0;
-      let level = null, message = '';
-      if (remaining <= 0)                              { level='critical'; message='หมดงบแล้ว'; }
-      else if (pct >= CONFIG.ALERT_THRESHOLD.critical) { level='critical'; message=`ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${remaining.toLocaleString('th-TH')} บาท)`; }
-      else if (pct >= CONFIG.ALERT_THRESHOLD.high)     { level='high';     message=`ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${remaining.toLocaleString('th-TH')} บาท)`; }
-      else if (pct >= CONFIG.ALERT_THRESHOLD.medium)   { level='medium';   message=`ใช้ไปแล้ว ${pct.toFixed(1)}% (เหลือ ${remaining.toLocaleString('th-TH')} บาท)`; }
-      if (level) alerts.push({
-        itemId: String(normalizeItemId(cols.itemId != null ? row[cols.itemId] : '') || '').trim(),
+      const item = mapBudgetRowToItem(row, cols, i + 1);
+      const alert = computeBudgetAlertLevel(item.budget, item.used, item.remaining);
+      if (alert.level) alerts.push({
+        itemId: item.itemId,
         department: dept,
-        work:   String(cols.work != null ? row[cols.work] || 'ไม่ระบุ' : 'ไม่ระบุ').trim(),
-        item:   String(cols.item != null ? row[cols.item] || 'ไม่ระบุ' : 'ไม่ระบุ').trim(),
-        budget: +budget, used: +used, remaining: +remaining,
-        percentage: +pct.toFixed(1), level, message
+        work:   item.work   || 'ไม่ระบุ',
+        item:   item.item   || 'ไม่ระบุ',
+        budget: +item.budget, used: +item.used, remaining: +alert.effective,
+        percentage: alert.percentage, level: alert.level, message: alert.message
       });
     }
     return { success: true, message: '', alerts };

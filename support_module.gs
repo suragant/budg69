@@ -45,10 +45,6 @@ function normalizeSupportItemModel(raw) {
   return model;
 }
 
-function _isValidIndex(idx) {
-  return typeof idx === 'number' && idx >= 0;
-}
-
 function ensureSupportSheetExists() {
   const ss = getSpreadsheet();
   let sheet = resolveSheet(SUPPORT_SHEET_NAME);
@@ -77,32 +73,19 @@ function ensureSupportSheetExists() {
 }
 
 function mapSupportColumns(headers) {
-  headers = headers || [];
-  const lower = headers.map(function(h) {
-    return (h || '').toString().trim().toLowerCase();
-  });
-
-  function findAny(candidates) {
-    for (let i = 0; i < candidates.length; i++) {
-      const idx = lower.indexOf((candidates[i] || '').toString().trim().toLowerCase());
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  }
-
   return {
-    itemId: findAny(['item id', 'itemid', 'id', 'รหัส', 'รหัสรายการ', 'item', 'บาร์โค้ด']),
-    department: findAny(['สำนัก/กอง', 'หน่วยงาน', 'department', 'office', 'สำนัก', 'กอง']),
-    budgetCategory: findAny(['งบรายจ่าย', 'ประเภทงบ', 'budgetcategory', 'budget type']),
-    area: findAny(['ด้าน', 'area', 'work', 'งาน']),
-    expenseType: findAny(['ประเภทรายจ่าย', 'expense type', 'ประเภท']),
-    item: findAny(['รายการ', 'description', 'item', 'detail']),
-    allocatedQty: findAny(['จำนวนจัดสรร', 'จำนวนจัดสรร(หน่วย)', 'allocatedqty', 'qty', 'quantity']),
-    usedQty: findAny(['จำนวนเบิกจ่าย', 'จำนวนเบิก', 'usedqty', 'quantity_used']),
-    budgetMoney: findAny(['งบประมาณจัดสรร', 'งบประมาณ', 'budget', 'งบจัดสรร']),
-    usedMoney: findAny(['งบประมาณเบิกจ่าย', 'usedmoney', 'amount_used', 'เบิกจ่าย']),
-    remainingMoney: findAny(['งบประมาณคงเหลือ', 'คงเหลือ', 'remaining', 'balance']),
-    note: findAny(['หมายเหตุ', 'note', 'comments'])
+    itemId: findHeaderIndex(headers, ['item id', 'itemid', 'id', 'รหัส', 'รหัสรายการ', 'item', 'บาร์โค้ด']),
+    department: findHeaderIndex(headers, ['สำนัก/กอง', 'หน่วยงาน', 'department', 'office', 'สำนัก', 'กอง']),
+    budgetCategory: findHeaderIndex(headers, ['งบรายจ่าย', 'ประเภทงบ', 'budgetcategory', 'budget type']),
+    area: findHeaderIndex(headers, ['ด้าน', 'area', 'work', 'งาน']),
+    expenseType: findHeaderIndex(headers, ['ประเภทรายจ่าย', 'expense type', 'ประเภท']),
+    item: findHeaderIndex(headers, ['รายการ', 'description', 'item', 'detail']),
+    allocatedQty: findHeaderIndex(headers, ['จำนวนจัดสรร', 'จำนวนจัดสรร(หน่วย)', 'allocatedqty', 'qty', 'quantity']),
+    usedQty: findHeaderIndex(headers, ['จำนวนเบิกจ่าย', 'จำนวนเบิก', 'usedqty', 'quantity_used']),
+    budgetMoney: findHeaderIndex(headers, ['งบประมาณจัดสรร', 'งบประมาณ', 'budget', 'งบจัดสรร']),
+    usedMoney: findHeaderIndex(headers, ['งบประมาณเบิกจ่าย', 'usedmoney', 'amount_used', 'เบิกจ่าย']),
+    remainingMoney: findHeaderIndex(headers, ['งบประมาณคงเหลือ', 'คงเหลือ', 'remaining', 'balance']),
+    note: findHeaderIndex(headers, ['หมายเหตุ', 'note', 'comments'])
   };
 }
 
@@ -143,8 +126,7 @@ function getSupportItemsSupport() {
 
       if (
         !item.department ||
-        user.role === 'admin' ||
-        normalizeAccessValue(item.department) === normalizeAccessValue(user.department)
+        hasAccessToRow(user, item.department)
       ) {
         items.push(item);
       }
@@ -159,50 +141,7 @@ function getSupportItemsSupport() {
 
 function findRowIndexInSheetSupport(itemId) {
   try {
-    const sheet = resolveSheet(SUPPORT_SHEET_NAME);
-    if (!sheet) return null;
-
-    const data = sheet.getDataRange().getValues();
-    if (!data || data.length < 2) return null;
-
-    const headers = (data[0] || []).map(function(h) {
-      return (h || '').toString();
-    });
-    const map = mapSupportColumns(headers);
-    const idCol = _isValidIndex(map.itemId) ? map.itemId : 0;
-
-    const searchRaw = (itemId || '').toString().trim();
-    if (!searchRaw) return null;
-    const searchNorm = normalizeItemId(searchRaw).toUpperCase();
-    const tried = [];
-
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i] || [];
-      const cellVal = (row[idCol] || '').toString().trim();
-      if (!cellVal) {
-        tried.push({ row: i + 1, cell: '', match: false });
-        continue;
-      }
-
-      const cellNorm = normalizeItemId(cellVal).toUpperCase();
-      tried.push({ row: i + 1, cell: cellVal, cellNorm: cellNorm });
-
-      if (itemIdsMatch(cellVal, searchRaw)) {
-        Logger.log('findRowIndexInSheetSupport: exact normalized match row=%s cell="%s"', i + 1, cellVal);
-        return i + 1;
-      }
-    }
-
-    try {
-      const sample = tried.slice(0, 12).map(function(t) {
-        return JSON.stringify(t);
-      }).join(' | ');
-      Logger.log('findRowIndexInSheetSupport: NOT FOUND for "%s" (norm="%s"). Tried sample: %s', searchRaw, searchNorm, sample);
-    } catch (e) {
-      Logger.log('findRowIndexInSheetSupport: NOT FOUND (logging failed)');
-    }
-
-    return null;
+    return findRowIndexInSheet(SUPPORT_SHEET_NAME, itemId, mapSupportColumns);
   } catch (e) {
     Logger.log('findRowIndexInSheetSupport error: ' + e.toString());
     return null;
@@ -249,11 +188,15 @@ function recordSupportExpenseSupport(itemId, amount, description, expenseDate, q
     if (_isValidIndex(map.usedMoney)) {
       const currentUsed = parseNumberSafe(rowVals[map.usedMoney] || 0);
       const budget = _isValidIndex(map.budgetMoney) ? parseNumberSafe(rowVals[map.budgetMoney] || 0) : 0;
-      newUsedMoney = Number((currentUsed + addAmt).toFixed(2));
+      const calc = calculateBudgetSafely(budget, currentUsed, addAmt);
+      if (!calc.valid) {
+        return createResponse(false, 'ยอดเบิกจ่ายเกินงบประมาณที่ตั้งไว้');
+      }
+      newUsedMoney = calc.newUsed;
+      newRemainingMoney = calc.newRemaining;
       sheet.getRange(rowIndex, map.usedMoney + 1).setValue(newUsedMoney);
 
       if (_isValidIndex(map.budgetMoney) && _isValidIndex(map.remainingMoney)) {
-        newRemainingMoney = Number((budget - newUsedMoney).toFixed(2));
         sheet.getRange(rowIndex, map.remainingMoney + 1).setValue(newRemainingMoney);
       }
     }
