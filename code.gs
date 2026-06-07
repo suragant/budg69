@@ -1,6 +1,20 @@
 // Code.gs - Main Backend Script (Improved & Optimized & Secured)
 // Last Updated: 2026-03-19
 
+// ==================== INPUT VALIDATION ====================
+
+function validateExpenseInput(itemId, amount, expenseDate) {
+  const errors = [];
+  if (!itemId || !String(itemId).trim()) errors.push('เธฃเธซเธฑเธชเธฃเธฒเธขเธเธฒเธฃ (Item ID) เนเธกเนเนเธ”เนเธฃเธฐเธเธธ');
+  const amt = parseFloat(String(amount || '').replace(/[^\d\.\-]/g, '')) || 0;
+  if (isNaN(amt) || amt <= 0) errors.push('เธเธณเธเธงเธเน€เธเธดเธเธ•เนเธญเธเธกเธฒเธเธเธงเนเธฒ 0');
+  if (expenseDate) {
+    const dt = (expenseDate instanceof Date) ? expenseDate : new Date(expenseDate);
+    if (isNaN(dt.getTime())) errors.push('เธฃเธนเธเนเธเธเธงเธฑเธเธ—เธตเนเนเธกเนเธ–เธนเธเธ•เนเธญเธ');
+  }
+  return { valid: errors.length === 0, errors, sanitizedAmount: amt };
+}
+
 // ==================== EXPENSE RECORDING ====================
 
 function buildBudgetAlertEmailBody(recipientEmail, alerts, dateStr) {

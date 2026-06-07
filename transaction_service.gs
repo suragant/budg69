@@ -3,12 +3,12 @@
 
 function validateExpenseInput(itemId, amount, expenseDate) {
   const errors = [];
-  if (!itemId || !String(itemId).trim()) errors.push('เธฃเธซเธฑเธชเธฃเธฒเธขเธเธฒเธฃ (Item ID) เนเธกเนเนเธ”เนเธฃเธฐเธเธธ');
+  if (!itemId || !String(itemId).trim()) errors.push('กรุณาระบุรหัสรายการ (Item ID)');
   const amt = parseFloat(String(amount || '').replace(/[^\d\.\-]/g, '')) || 0;
-  if (isNaN(amt) || amt <= 0) errors.push('เธเธณเธเธงเธเน€เธเธดเธเธ•เนเธญเธเธกเธฒเธเธเธงเนเธฒ 0');
+  if (isNaN(amt) || amt <= 0) errors.push('จำนวนเงินต้องมากกว่า 0');
   if (expenseDate) {
     const dt = (expenseDate instanceof Date) ? expenseDate : new Date(expenseDate);
-    if (isNaN(dt.getTime())) errors.push('เธฃเธนเธเนเธเธเธงเธฑเธเธ—เธตเนเนเธกเนเธ–เธนเธเธ•เนเธญเธ');
+    if (isNaN(dt.getTime())) errors.push('รูปแบบวันที่ไม่ถูกต้อง');
   }
   return { valid: errors.length === 0, errors, sanitizedAmount: amt };
 }
@@ -17,25 +17,25 @@ function recordExpense(itemId, amount, description, expenseDate) {
   const startTime  = new Date();
   const currentUser = getUserPermission();
   if (!currentUser || currentUser.role === 'viewer') {
-    return createResponse(false, 'เนเธกเนเธกเธตเธชเธดเธ—เธเธดเนเธเธฑเธเธ—เธถเธเธฃเธฒเธขเธเธฒเธฃ');
+    return createResponse(false, 'ไม่มีสิทธิ์บันทึกรายการ');
   }
 
   const validation = validateExpenseInput(itemId, amount, expenseDate);
-  if (!validation.valid) return createResponse(false, 'เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + validation.errors.join(', '));
+  if (!validation.valid) return createResponse(false, 'ข้อผิดพลาด: ' + validation.errors.join(', '));
 
   const amt = validation.sanitizedAmount;
   const normalizedItemId = normalizeItemId(String(itemId).trim());
-  if (!normalizedItemId) return createResponse(false, 'เนเธกเนเธชเธฒเธกเธฒเธฃเธ– normalize Item ID เนเธ”เน');
+  if (!normalizedItemId) return createResponse(false, 'ไม่สามารถ normalize Item ID ได้');
 
   const parsedDate = normalizeDateInput(expenseDate);
 
   const lock = acquireLockWithRetry();
-  if (!lock) return createResponse(false, 'เธฃเธฐเธเธเธเธณเธฅเธฑเธเธเธฃเธฑเธเธเธฃเธธเธเธเนเธญเธกเธนเธฅ เธเธฃเธธเธ“เธฒเธฅเธญเธเนเธซเธกเนเธญเธตเธเธเธฃเธฑเนเธ');
+  if (!lock) return createResponse(false, 'ระบบกำลังปรับปรุงข้อมูล กรุณาลองใหม่อีกครั้ง');
 
   try {
     const rowIndex = findRowIndexByItemId(normalizedItemId);
     if (typeof rowIndex !== 'number' || rowIndex <= 1) {
-      return createResponse(false, 'เนเธกเนเธเธ Item ID: ' + normalizedItemId);
+      return createResponse(false, 'ไม่พบ Item ID: ' + normalizedItemId);
     }
 
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
@@ -43,7 +43,7 @@ function recordExpense(itemId, amount, description, expenseDate) {
     const headers     = budgetSheet.getRange(1, 1, 1, lastCol).getValues()[0];
     const cols        = getColumnIndices(headers);
     if (!cols || cols.itemId === undefined || cols.itemId === -1) {
-      return createResponse(false, 'เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธซเธฒเธเธญเธฅเธฑเธกเธเน itemId เนเธ”เน');
+      return createResponse(false, 'ไม่สามารถหาคอลัมน์ itemId ได้');
     }
 
     const values    = budgetSheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0];
@@ -51,16 +51,16 @@ function recordExpense(itemId, amount, description, expenseDate) {
     const deptInRow = (values[cols.department] || '').toString().trim();
 
     if (sheetId.toUpperCase() !== normalizedItemId.toUpperCase()) {
-      return createResponse(false, 'เธเนเธญเธกเธนเธฅเนเธกเนเธชเธญเธ”เธเธฅเนเธญเธเธเธฑเธ: เธฃเธซเธฑเธชเธฃเธฒเธขเธเธฒเธฃเนเธกเนเธ•เธฃเธเธเธฑเธเนเธ–เธงเธ—เธตเนเธเนเธเธเธ');
+      return createResponse(false, 'ข้อมูลไม่สอดคล้องกัน: รหัสรายการไม่ตรงกับแถวที่ค้นพบ');
     }
     if (!hasAccessToRow(currentUser, deptInRow)) {
-      return createResponse(false, 'เธเธธเธ“เนเธกเนเธกเธตเธชเธดเธ—เธเธดเนเน€เธเธดเธเธเนเธฒเธขเธเธฒเธเนเธเธเธเธเธตเน');
+      return createResponse(false, 'คุณไม่มีสิทธิ์เบิกจ่ายจากแผนกนี้');
     }
 
     const currentUsed = parseNumberSafe(values[cols.used]   || 0);
     const budget      = parseNumberSafe(values[cols.budget] || 0);
     const calc = calculateBudgetSafely(budget, currentUsed, amt);
-    if (!calc.valid) return createResponse(false, 'เธขเธญเธ”เน€เธเธดเธเธเนเธฒเธขเน€เธเธดเธเธเธเธเธฃเธฐเธกเธฒเธ“เธ—เธตเนเธ•เธฑเนเธเนเธงเน');
+    if (!calc.valid) return createResponse(false, 'ยอดเบิกจ่ายเกินงบประมาณที่ตั้งไว้');
 
     const { newUsed, newRemaining } = calc;
 
@@ -76,7 +76,7 @@ function recordExpense(itemId, amount, description, expenseDate) {
       }
     } catch (writeErr) {
       handleError('recordExpense - sheet write', writeErr, { rowIndex });
-      return createResponse(false, 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”เนเธเธเธฒเธฃเธเธฑเธเธ—เธถเธเธเนเธญเธกเธนเธฅ');
+      return createResponse(false, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     }
 
     try {
@@ -86,13 +86,13 @@ function recordExpense(itemId, amount, description, expenseDate) {
     }
 
     Logger.log('recordExpense completed in %sms', new Date() - startTime);
-    return createResponse(true, 'เธเธฑเธเธ—เธถเธเธชเธณเน€เธฃเนเธ', {
+    return createResponse(true, 'บันทึกสำเร็จ', {
       newUsed, newRemaining, timestamp: new Date().toISOString()
     });
 
   } catch (err) {
     handleError('recordExpense', err, { itemId: normalizedItemId, amount: amt });
-    return createResponse(false, 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + err.toString());
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + err.toString());
   } finally {
     try { if (lock) lock.releaseLock(); } catch (e) {}
   }
@@ -101,10 +101,10 @@ function recordExpense(itemId, amount, description, expenseDate) {
 function transferBudget(fromItemId, toItemId, amount, reason) {
   const currentUser = getUserPermission();
   if (!currentUser) {
-    return createResponse(false, 'เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธนเนเนเธเนเนเธเธฃเธฐเธเธ');
+    return createResponse(false, 'ไม่พบข้อมูลผู้ใช้ในระบบ');
   }
   if (currentUser.role === 'viewer') {
-    return createResponse(false, 'เธเธนเนเนเธเนเธเธฃเธฐเน€เธ เธ— Viewer เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เนเธญเธเธเธเนเธ”เน');
+    return createResponse(false, 'ผู้ใช้ประเภท Viewer ไม่สามารถโอนงบได้');
   }
 
   const errors   = [];
@@ -112,33 +112,33 @@ function transferBudget(fromItemId, toItemId, amount, reason) {
   const normTo   = normalizeItemId(String(toItemId   || '').trim());
   const amt      = parseNumberSafe(amount);
 
-  if (!normFrom)              errors.push('เนเธกเนเธฃเธฐเธเธธ Item ID เธ•เนเธเธ—เธฒเธ');
-  if (!normTo)                errors.push('เนเธกเนเธฃเธฐเธเธธ Item ID เธเธฅเธฒเธขเธ—เธฒเธ');
-  if (normFrom === normTo)    errors.push('เธ•เนเธเธ—เธฒเธเนเธฅเธฐเธเธฅเธฒเธขเธ—เธฒเธเธ•เนเธญเธเนเธกเนเนเธเนเธฃเธฒเธขเธเธฒเธฃเน€เธ”เธตเธขเธงเธเธฑเธ');
-  if (isNaN(amt) || amt <= 0) errors.push('เธเธณเธเธงเธเน€เธเธดเธเธ•เนเธญเธเธกเธฒเธเธเธงเนเธฒ 0');
-  if (!reason || !String(reason).trim()) errors.push('เธเธฃเธธเธ“เธฒเธฃเธฐเธเธธเน€เธซเธ•เธธเธเธฅเธเธฒเธฃเนเธญเธเธเธ');
-  if (errors.length) return createResponse(false, 'เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + errors.join(', '));
+  if (!normFrom)              errors.push('ไม่ระบุ Item ID ต้นทาง');
+  if (!normTo)                errors.push('ไม่ระบุ Item ID ปลายทาง');
+  if (normFrom === normTo)    errors.push('ต้นทางและปลายทางต้องไม่ใช่รายการเดียวกัน');
+  if (isNaN(amt) || amt <= 0) errors.push('จำนวนเงินต้องมากกว่า 0');
+  if (!reason || !String(reason).trim()) errors.push('กรุณาระบุเหตุผลการโอนงบ');
+  if (errors.length) return createResponse(false, 'ข้อผิดพลาด: ' + errors.join(', '));
 
   const lock = acquireLockWithRetry();
-  if (!lock) return createResponse(false, 'เธฃเธฐเธเธเธเธณเธฅเธฑเธเธเธฃเธฐเธกเธงเธฅเธเธฅ เธเธฃเธธเธ“เธฒเธฅเธญเธเนเธซเธกเนเธญเธตเธเธเธฃเธฑเนเธ');
+  if (!lock) return createResponse(false, 'ระบบกำลังประมวลผล กรุณาลองใหม่');
 
   try {
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return createResponse(false, 'เนเธกเนเธเธ Sheet เธเธเธเธฃเธฐเธกเธฒเธ“');
+    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
 
     const allData = budgetSheet.getDataRange().getValues();
     const cols    = getColumnIndices(allData[0]);
 
     if (cols.budget === -1 || cols.used === -1 || cols.remaining === -1) {
-      return createResponse(false, 'เนเธกเนเธเธเธเธญเธฅเธฑเธกเธเนเธ—เธตเนเธเธณเน€เธเนเธ');
+      return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น');
     }
 
     const foundRows = findBudgetRowIndicesByItemIds([normFrom, normTo], allData, cols);
     const fromRow = foundRows[normFrom.toUpperCase()];
     const toRow = foundRows[normTo.toUpperCase()];
 
-    if (!fromRow) return createResponse(false, 'เนเธกเนเธเธ Item ID เธ•เนเธเธ—เธฒเธ: '  + normFrom);
-    if (!toRow)   return createResponse(false, 'เนเธกเนเธเธ Item ID เธเธฅเธฒเธขเธ—เธฒเธ: ' + normTo);
+    if (!fromRow) return createResponse(false, 'ไม่พบ Item ID ต้นทาง: '  + normFrom);
+    if (!toRow)   return createResponse(false, 'ไม่พบ Item ID ปลายทาง: ' + normTo);
 
     const fromValues = allData[fromRow - 1];
     const toValues   = allData[toRow   - 1];
@@ -147,10 +147,10 @@ function transferBudget(fromItemId, toItemId, amount, reason) {
     const toDept   = (toValues[cols.department]   || '').toString().trim();
 
     if (!hasAccessToRow(currentUser, fromDept)) {
-      return createResponse(false, 'เธเธธเธ“เนเธกเนเธกเธตเธชเธดเธ—เธเธดเนเนเธญเธเธเธเธเธฒเธเธฃเธฒเธขเธเธฒเธฃเธ•เนเธเธ—เธฒเธ (เธซเธเนเธงเธขเธเธฒเธ: ' + fromDept + ')');
+      return createResponse(false, 'คุณไม่มีสิทธิ์โอนงบจากรายการต้นทาง (หน่วยงาน: ' + fromDept + ')');
     }
     if (!hasAccessToRow(currentUser, toDept)) {
-      return createResponse(false, 'เธเธธเธ“เนเธกเนเธกเธตเธชเธดเธ—เธเธดเนเนเธญเธเธเธเนเธเธขเธฑเธเธฃเธฒเธขเธเธฒเธฃเธเธฅเธฒเธขเธ—เธฒเธ (เธซเธเนเธงเธขเธเธฒเธ: ' + toDept + ')');
+      return createResponse(false, 'คุณไม่มีสิทธิ์โอนงบไปยังรายการปลายทาง (หน่วยงาน: ' + toDept + ')');
     }
 
     const fromBudget    = parseNumberSafe(fromValues[cols.budget]);
@@ -161,7 +161,7 @@ function transferBudget(fromItemId, toItemId, amount, reason) {
 
     if (amt > fromRemaining) {
       return createResponse(false,
-        `เธเธเธเธเน€เธซเธฅเธทเธญเธเธญเธเธ•เนเธเธ—เธฒเธเนเธกเนเน€เธเธตเธขเธเธเธญ (เธเธเน€เธซเธฅเธทเธญ: ${fromRemaining.toLocaleString('th-TH')} เธเธฒเธ—)`);
+        `งบคงเหลือของต้นทางไม่เพียงพอ (คงเหลือ: ${fromRemaining.toLocaleString('th-TH')} บาท)`);
     }
 
     const newFromBudget    = parseFloat((fromBudget    - amt).toFixed(2));
@@ -191,12 +191,12 @@ function transferBudget(fromItemId, toItemId, amount, reason) {
       budgetSheet.getRange(toRow,   remainingCol).setValue(newToRemaining);
     }
 
-    const note = `[TRANSFER] ${reason} (${normFrom} โ’ ${normTo})`;
+    const note = `[TRANSFER] ${reason} (${normFrom} → ${normTo})`;
     logTransaction(normFrom, -amt, note, new Date(), fromUsed, newFromRemaining, 'TRANSFER_OUT');
     logTransaction(normTo,    amt, note, new Date(), toUsed,   newToRemaining,   'TRANSFER_IN');
 
     return createResponse(true,
-      `เนเธญเธเธเธเธชเธณเน€เธฃเนเธ: ${normFrom} โ’ ${normTo} เธเธณเธเธงเธ ${amt.toLocaleString('th-TH')} เธเธฒเธ—`, {
+      `โอนงบสำเร็จ: ${normFrom} → ${normTo} จำนวน ${amt.toLocaleString('th-TH')} บาท`, {
         from: { itemId: normFrom, newBudget: newFromBudget, newRemaining: newFromRemaining },
         to:   { itemId: normTo,   newBudget: newToBudget,   newRemaining: newToRemaining },
         amount: amt, transferredBy: currentUser.email, timestamp: new Date().toISOString()
@@ -204,7 +204,7 @@ function transferBudget(fromItemId, toItemId, amount, reason) {
 
   } catch (err) {
     handleError('transferBudget', err, { fromItemId: normFrom, toItemId: normTo, amount: amt });
-    return createResponse(false, 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + err.toString());
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + err.toString());
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
@@ -212,17 +212,7 @@ function transferBudget(fromItemId, toItemId, amount, reason) {
 
 function logTransaction(itemId, amount, description, expenseDate, newUsed, newRemaining, type, quantity, status, editedBy) {
   try {
-    const ss = getSpreadsheet();
-    let logSheet = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
-    if (!logSheet) {
-      logSheet = ss.insertSheet(CONFIG.SHEETS.TRANSACTION_LOG);
-      logSheet.appendRow([
-        'Timestamp','Expense Date','User','Item ID','Amount',
-        'Description','New Used','New Remaining','Quantity','Type',
-        'Status','Edited By'
-      ]);
-      try { logSheet.getRange('D:D').setNumberFormat('@'); } catch (e) {}
-    }
+    const logSheet = ensureTransactionLogSheet();
     logSheet.appendRow([
       new Date(),
       normalizeDateInput(expenseDate),
@@ -246,13 +236,11 @@ function getTransactionHistory(itemId) {
   try {
     const inputId = normalizeItemId(itemId || '');
     if (!inputId) return [];
-    const logSheet = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
-    if (!logSheet) return [];
-    const data = logSheet.getDataRange().getValues();
+    const logContext = getTransactionLogContext();
+    if (!logContext) return [];
+    const data = logContext.sheet.getDataRange().getValues();
     if (!data || data.length < 2) return [];
-
-    const headers = (data[0] || []).map(h => (h || '').toString().trim());
-    const logCols = getTransactionLogColumnIndices(headers);
+    const logCols = logContext.logCols;
 
     const tz = CONFIG.TIMEZONE;
 
@@ -282,32 +270,23 @@ function getTransactionHistory(itemId) {
 
     const history = [];
     for (let i = data.length - 1; i >= 1; i--) {
-      const row = data[i] || [];
-      const logIdNorm = normalizeItemId((row[logCols.itemId] || '') + '');
-      if (!logIdNorm || logIdNorm.toUpperCase() !== inputId.toUpperCase()) continue;
-
-      const type = (row[logCols.type] || '') + '';
-      if (type === 'REVERSAL') continue;
-
-      const status = logCols.status !== -1 ? (row[logCols.status] || 'ACTIVE') + '' : 'ACTIVE';
-      const editedBy = logCols.editedBy !== -1 ? (row[logCols.editedBy] || '') + '' : '';
-      const quantity = logCols.quantity !== -1
-        ? ((typeof row[logCols.quantity] === 'number') ? row[logCols.quantity] : parseNumberSafe(row[logCols.quantity]))
-        : 0;
+      const entry = getTransactionLogRowModel(data[i], logCols, i + 1);
+      if (!entry.itemId || entry.itemId.toUpperCase() !== inputId.toUpperCase()) continue;
+      if (entry.type === 'REVERSAL') continue;
 
       history.push({
-        logRowIndex:  i + 1,
-        timestamp:    formatTs(row[0]),
-        expenseDate:  formatDate(row[1]),
-        user:         (row[logCols.user] || '') + '',
-        amount:       (typeof row[logCols.amount] === 'number') ? row[logCols.amount] : parseNumberSafe(row[logCols.amount]),
-        description:  (row[5] || '') + '',
-        newUsed:      (typeof row[6] === 'number') ? row[6] : parseNumberSafe(row[6]),
-        newRemaining: (typeof row[7] === 'number') ? row[7] : parseNumberSafe(row[7]),
-        quantity,
-        type,
-        status,
-        editedBy
+        logRowIndex:  entry.logRowIndex,
+        timestamp:    formatTs(entry.timestamp),
+        expenseDate:  formatDate(entry.expenseDate),
+        user:         entry.user,
+        amount:       entry.amount,
+        description:  entry.description,
+        newUsed:      entry.newUsed,
+        newRemaining: entry.newRemaining,
+        quantity:     entry.quantity,
+        type:         entry.type,
+        status:       entry.status,
+        editedBy:     entry.editedBy
       });
     }
     return history;
@@ -319,50 +298,46 @@ function getTransactionHistory(itemId) {
 
 function cancelExpense(logRowIndex, reason) {
   const currentUser = getUserPermission();
-  if (!currentUser) return createResponse(false, 'เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธนเนเนเธเน');
-  if (!logRowIndex || typeof logRowIndex !== 'number') return createResponse(false, 'เนเธกเนเธฃเธฐเธเธธ logRowIndex');
-  if (!reason || !String(reason).trim()) return createResponse(false, 'เธเธฃเธธเธ“เธฒเธฃเธฐเธเธธเน€เธซเธ•เธธเธเธฅเธเธฒเธฃเธขเธเน€เธฅเธดเธ');
+  if (!currentUser) return createResponse(false, 'ไม่พบข้อมูลผู้ใช้');
+  if (!logRowIndex || typeof logRowIndex !== 'number') return createResponse(false, 'ไม่ระบุ logRowIndex');
+  if (!reason || !String(reason).trim()) return createResponse(false, 'กรุณาระบุเหตุผลการยกเลิก');
 
   const lock = acquireLockWithRetry();
-  if (!lock) return createResponse(false, 'เธฃเธฐเธเธเธเธณเธฅเธฑเธเธเธฃเธฐเธกเธงเธฅเธเธฅ เธเธฃเธธเธ“เธฒเธฅเธญเธเนเธซเธกเน');
+  if (!lock) return createResponse(false, 'ระบบกำลังประมวลผล กรุณาลองใหม่');
 
   try {
-    const logSheet   = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
-    if (!logSheet) return createResponse(false, 'เนเธกเนเธเธ Transaction Log');
+    const logContext = getTransactionLogContext();
+    if (!logContext) return createResponse(false, 'ไม่พบ Transaction Log');
 
-    const lastLogCol = logSheet.getLastColumn();
-    const headers    = logSheet.getRange(1, 1, 1, lastLogCol).getValues()[0].map(h => (h||'').toString().trim());
-    const logCols = getTransactionLogColumnIndices(headers);
+    const logSheet = logContext.sheet;
+    const logCols = logContext.logCols;
+    const logRow = logSheet.getRange(logRowIndex, 1, 1, logContext.lastCol).getValues()[0];
+    const logEntry = getTransactionLogRowModel(logRow, logCols, logRowIndex);
 
-    const logRow    = logSheet.getRange(logRowIndex, 1, 1, lastLogCol).getValues()[0];
-    const logStatus = logCols.status !== -1 ? (logRow[logCols.status] || 'ACTIVE') + '' : 'ACTIVE';
+    if (logEntry.status === 'CANCELLED') return createResponse(false, 'รายการนี้ถูกยกเลิกไปแล้ว');
 
-    if (logStatus === 'CANCELLED') return createResponse(false, 'เธฃเธฒเธขเธเธฒเธฃเธเธตเนเธ–เธนเธเธขเธเน€เธฅเธดเธเนเธเนเธฅเนเธง');
-
-    const logOwner = (logRow[logCols.user] || '') + '';
-    const isOwner  = logOwner.toLowerCase() === currentUser.email.toLowerCase();
+    const isOwner  = logEntry.user.toLowerCase() === currentUser.email.toLowerCase();
     if (!isOwner && currentUser.role !== 'admin') {
-      return createResponse(false, 'เธเธธเธ“เนเธกเนเธกเธตเธชเธดเธ—เธเธดเนเธขเธเน€เธฅเธดเธเธฃเธฒเธขเธเธฒเธฃเธเธญเธเธเธนเนเธญเธทเนเธ');
+      return createResponse(false, 'คุณไม่มีสิทธิ์ยกเลิกรายการของผู้อื่น');
     }
 
-    const logType = (logRow[logCols.type] || '') + '';
-    if (['TRANSFER_OUT','TRANSFER_IN','REVERSAL'].includes(logType)) {
-      return createResponse(false, 'เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธขเธเน€เธฅเธดเธเธฃเธฒเธขเธเธฒเธฃเธเธฃเธฐเน€เธ เธ— ' + logType);
+    if (['TRANSFER_OUT','TRANSFER_IN','REVERSAL'].includes(logEntry.type)) {
+      return createResponse(false, 'ไม่สามารถยกเลิกรายการประเภท ' + logEntry.type);
     }
 
-    const itemId = normalizeItemId((logRow[logCols.itemId] || '') + '');
-    const amount = (typeof logRow[logCols.amount] === 'number') ? logRow[logCols.amount] : parseNumberSafe(logRow[logCols.amount]);
-    if (!itemId || !amount) return createResponse(false, 'เธเนเธญเธกเธนเธฅเธฃเธฒเธขเธเธฒเธฃเนเธกเนเธเธฃเธ');
+    const itemId = logEntry.itemId;
+    const amount = logEntry.amount;
+    if (!itemId || !amount) return createResponse(false, 'ข้อมูลรายการไม่ครบ');
 
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return createResponse(false, 'เนเธกเนเธเธ Sheet เธเธเธเธฃเธฐเธกเธฒเธ“');
+    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
     const allData = budgetSheet.getDataRange().getValues();
     const cols    = getColumnIndices(allData[0]);
-    if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'เนเธกเนเธเธเธเธญเธฅเธฑเธกเธเนเธ—เธตเนเธเธณเน€เธเนเธ');
+    if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น');
 
     const foundRows = findBudgetRowIndicesByItemIds([itemId], allData, cols);
     const budgetRow = foundRows[itemId.toUpperCase()];
-    if (!budgetRow) return createResponse(false, 'เนเธกเนเธเธ Item ID: ' + itemId);
+    if (!budgetRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
 
     const budgetRowData = allData[budgetRow - 1];
     const currentUsed   = parseNumberSafe(budgetRowData[cols.used]);
@@ -370,7 +345,7 @@ function cancelExpense(logRowIndex, reason) {
     const newUsed       = parseFloat((currentUsed - amount).toFixed(2));
     const newRemaining  = parseFloat((budget - newUsed).toFixed(2));
 
-    if (newUsed < 0) return createResponse(false, 'เนเธกเนเธชเธฒเธกเธฒเธฃเธ– reverse เนเธ”เน: เธขเธญเธ” used เธเธฐเธ•เธดเธ”เธฅเธ');
+    if (newUsed < 0) return createResponse(false, 'ไม่สามารถ reverse ได้: ยอด used จะติดลบ');
 
     if (Math.abs(cols.used - cols.remaining) === 1) {
       const startCol = Math.min(cols.used, cols.remaining) + 1;
@@ -399,14 +374,14 @@ function cancelExpense(logRowIndex, reason) {
       currentUser.email
     );
 
-    return createResponse(true, 'เธขเธเน€เธฅเธดเธเธฃเธฒเธขเธเธฒเธฃเธชเธณเน€เธฃเนเธ', {
+    return createResponse(true, 'ยกเลิกรายการสำเร็จ', {
       itemId, reversedAmount: amount, newUsed, newRemaining,
       cancelledBy: currentUser.email, timestamp: new Date().toISOString()
     });
 
   } catch (err) {
     handleError('cancelExpense', err, { logRowIndex });
-    return createResponse(false, 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + err.toString());
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + err.toString());
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
@@ -414,53 +389,49 @@ function cancelExpense(logRowIndex, reason) {
 
 function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
   const currentUser = getUserPermission();
-  if (!currentUser) return createResponse(false, 'เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธนเนเนเธเน');
-  if (!logRowIndex || typeof logRowIndex !== 'number') return createResponse(false, 'เนเธกเนเธฃเธฐเธเธธ logRowIndex');
+  if (!currentUser) return createResponse(false, 'ไม่พบข้อมูลผู้ใช้');
+  if (!logRowIndex || typeof logRowIndex !== 'number') return createResponse(false, 'ไม่ระบุ logRowIndex');
 
   const amt = parseNumberSafe(newAmount);
-  if (isNaN(amt) || amt <= 0) return createResponse(false, 'เธเธณเธเธงเธเน€เธเธดเธเธ•เนเธญเธเธกเธฒเธเธเธงเนเธฒ 0');
+  if (isNaN(amt) || amt <= 0) return createResponse(false, 'จำนวนเงินต้องมากกว่า 0');
 
   const lock = acquireLockWithRetry();
-  if (!lock) return createResponse(false, 'เธฃเธฐเธเธเธเธณเธฅเธฑเธเธเธฃเธฐเธกเธงเธฅเธเธฅ เธเธฃเธธเธ“เธฒเธฅเธญเธเนเธซเธกเน');
+  if (!lock) return createResponse(false, 'ระบบกำลังประมวลผล กรุณาลองใหม่');
 
   try {
-    const logSheet   = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
-    if (!logSheet) return createResponse(false, 'เนเธกเนเธเธ Transaction Log');
+    const logContext = getTransactionLogContext();
+    if (!logContext) return createResponse(false, 'ไม่พบ Transaction Log');
 
-    const lastLogCol = logSheet.getLastColumn();
-    const headers    = logSheet.getRange(1, 1, 1, lastLogCol).getValues()[0].map(h => (h||'').toString().trim());
-    const logCols = getTransactionLogColumnIndices(headers);
+    const logSheet = logContext.sheet;
+    const logCols = logContext.logCols;
+    const logRow = logSheet.getRange(logRowIndex, 1, 1, logContext.lastCol).getValues()[0];
+    const logEntry = getTransactionLogRowModel(logRow, logCols, logRowIndex);
 
-    const logRow    = logSheet.getRange(logRowIndex, 1, 1, lastLogCol).getValues()[0];
-    const logStatus = logCols.status !== -1 ? (logRow[logCols.status] || 'ACTIVE') + '' : 'ACTIVE';
+    if (logEntry.status === 'CANCELLED') return createResponse(false, 'ไม่สามารถแก้ไขรายการที่ยกเลิกแล้ว');
 
-    if (logStatus === 'CANCELLED') return createResponse(false, 'เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เนเธเนเนเธเธฃเธฒเธขเธเธฒเธฃเธ—เธตเนเธขเธเน€เธฅเธดเธเนเธฅเนเธง');
-
-    const logOwner = (logRow[logCols.user] || '') + '';
-    const isOwner  = logOwner.toLowerCase() === currentUser.email.toLowerCase();
+    const isOwner  = logEntry.user.toLowerCase() === currentUser.email.toLowerCase();
     if (!isOwner && currentUser.role !== 'admin') {
-      return createResponse(false, 'เธเธธเธ“เนเธกเนเธกเธตเธชเธดเธ—เธเธดเนเนเธเนเนเธเธฃเธฒเธขเธเธฒเธฃเธเธญเธเธเธนเนเธญเธทเนเธ');
+      return createResponse(false, 'คุณไม่มีสิทธิ์แก้ไขรายการของผู้อื่น');
     }
 
-    const logType = (logRow[logCols.type] || '') + '';
-    if (['TRANSFER_OUT','TRANSFER_IN','REVERSAL'].includes(logType)) {
-      return createResponse(false, 'เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เนเธเนเนเธเธฃเธฒเธขเธเธฒเธฃเธเธฃเธฐเน€เธ เธ— ' + logType);
+    if (['TRANSFER_OUT','TRANSFER_IN','REVERSAL'].includes(logEntry.type)) {
+      return createResponse(false, 'ไม่สามารถแก้ไขรายการประเภท ' + logEntry.type);
     }
 
-    const itemId    = normalizeItemId((logRow[logCols.itemId] || '') + '');
-    const oldAmount = (typeof logRow[logCols.amount] === 'number') ? logRow[logCols.amount] : parseNumberSafe(logRow[logCols.amount]);
+    const itemId    = logEntry.itemId;
+    const oldAmount = logEntry.amount;
     const diff      = amt - oldAmount;
-    if (!itemId) return createResponse(false, 'เนเธกเนเธเธ Item ID เนเธเธฃเธฒเธขเธเธฒเธฃเธเธตเน');
+    if (!itemId) return createResponse(false, 'ไม่พบ Item ID ในรายการนี้');
 
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return createResponse(false, 'เนเธกเนเธเธ Sheet เธเธเธเธฃเธฐเธกเธฒเธ“');
+    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
     const allData = budgetSheet.getDataRange().getValues();
     const cols    = getColumnIndices(allData[0]);
-    if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'เนเธกเนเธเธเธเธญเธฅเธฑเธกเธเนเธ—เธตเนเธเธณเน€เธเนเธ');
+    if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น');
 
     const foundRows = findBudgetRowIndicesByItemIds([itemId], allData, cols);
     const budgetRow = foundRows[itemId.toUpperCase()];
-    if (!budgetRow) return createResponse(false, 'เนเธกเนเธเธ Item ID: ' + itemId);
+    if (!budgetRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
 
     const budgetRowData = allData[budgetRow - 1];
     const currentUsed   = parseNumberSafe(budgetRowData[cols.used]);
@@ -468,8 +439,8 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
     const newUsed       = parseFloat((currentUsed + diff).toFixed(2));
     const newRemaining  = parseFloat((budget - newUsed).toFixed(2));
 
-    if (newUsed < 0)      return createResponse(false, 'เธขเธญเธ”เธ—เธตเนเนเธเนเนเธเธ—เธณเนเธซเนเธขเธญเธ” used เธ•เธดเธ”เธฅเธ');
-    if (newRemaining < 0) return createResponse(false, 'เธขเธญเธ”เน€เธเธดเธเธเนเธฒเธขเน€เธเธดเธเธเธเธเธฃเธฐเธกเธฒเธ“เธ—เธตเนเธ•เธฑเนเธเนเธงเน');
+    if (newUsed < 0)      return createResponse(false, 'ยอดที่แก้ไขทำให้ยอด used ติดลบ');
+    if (newRemaining < 0) return createResponse(false, 'ยอดเบิกจ่ายเกินงบประมาณที่ตั้งไว้');
 
     if (Math.abs(cols.used - cols.remaining) === 1) {
       const startCol = Math.min(cols.used, cols.remaining) + 1;
@@ -503,7 +474,7 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
       currentUser.email
     );
 
-    return createResponse(true, 'เนเธเนเนเธเธฃเธฒเธขเธเธฒเธฃเธชเธณเน€เธฃเนเธ', {
+    return createResponse(true, 'แก้ไขรายการสำเร็จ', {
       itemId, oldAmount, newAmount: amt, diff,
       newUsed, newRemaining,
       editedBy: currentUser.email, timestamp: new Date().toISOString()
@@ -511,7 +482,7 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
 
   } catch (err) {
     handleError('editExpense', err, { logRowIndex, newAmount });
-    return createResponse(false, 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + err.toString());
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + err.toString());
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
