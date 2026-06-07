@@ -4,14 +4,14 @@
 function getBudgetItems() {
   try {
     const user = getUserPermission();
-    if (!user) return createResponse(false, `เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธนเนเนเธเนเนเธเธฃเธฐเธเธ (Email: ${getUserEmail()})`);
+    if (!user) return createResponse(false, `ไม่พบข้อมูลผู้ใช้ในระบบ (Email: ${getUserEmail()})`);
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return createResponse(false, 'เนเธกเนเธเธ Sheet เธเธเธเธฃเธฐเธกเธฒเธ“');
+    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
     const data = budgetSheet.getDataRange().getValues();
-    if (!data || data.length < 2) return createResponse(false, 'Sheet เธเธเธเธฃเธฐเธกเธฒเธ“เนเธกเนเธกเธตเธเนเธญเธกเธนเธฅ');
+    if (!data || data.length < 2) return createResponse(false, 'Sheet งบประมาณไม่มีข้อมูล');
     const cols = getColumnIndices(data[0]);
     if (cols.department === -1 || cols.budget === -1) {
-      return createResponse(false, 'เนเธกเนเธเธ column เธ—เธตเนเธเธณเน€เธเนเธ (เธชเธณเธเธฑเธ/เธเธญเธ เธซเธฃเธทเธญ เธเธเธเธฃเธฐเธกเธฒเธ“)'); 
+      return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น (สำนัก/กอง หรือ งบประมาณ)'); 
     }
     const items = data.slice(1)
       .map((row, i) => ({ row, originalIndex: i + 2 }))
@@ -37,21 +37,21 @@ function getBudgetItems() {
     return createResponse(true, '', { user, items });
   } catch (error) {
     handleError('getBudgetItems', error);
-    return createResponse(false, 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + error.toString());
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + error.toString());
   }
 }
 
 function getInitialData() {
   try {
     const user = getUserPermission();
-    if (!user) return createResponse(false, `เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธนเนเนเธเนเนเธเธฃเธฐเธเธ (Email: ${getUserEmail()})`);
+    if (!user) return createResponse(false, `ไม่พบข้อมูลผู้ใช้ในระบบ (Email: ${getUserEmail()})`);
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return createResponse(false, 'เนเธกเนเธเธ Sheet เธเธเธเธฃเธฐเธกเธฒเธ“');
+    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
     const data = budgetSheet.getDataRange().getValues();
-    if (!data || data.length < 2) return createResponse(false, 'Sheet เธเธเธเธฃเธฐเธกเธฒเธ“เนเธกเนเธกเธตเธเนเธญเธกเธนเธฅ');
+    if (!data || data.length < 2) return createResponse(false, 'Sheet งบประมาณไม่มีข้อมูล');
     const cols = getColumnIndices(data[0]);
     if (cols.department === -1 || cols.budget === -1) {
-      return createResponse(false, 'เนเธกเนเธเธ column เธ—เธตเนเธเธณเน€เธเนเธ (เธชเธณเธเธฑเธ/เธเธญเธ เธซเธฃเธทเธญ เธเธเธเธฃเธฐเธกเธฒเธ“)'); 
+      return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น (สำนัก/กอง หรือ งบประมาณ)'); 
     }
 
     const items  = [];
@@ -106,7 +106,7 @@ function getInitialData() {
     return createResponse(true, '', { user, items, alerts });
   } catch (error) {
     handleError('getInitialData', error);
-    return createResponse(false, 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + error.toString());
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + error.toString());
   }
 }
 
@@ -158,11 +158,11 @@ function getTransferTotalsByItemId() {
 function getDashboardData() {
   try {
     const user = getUserPermission();
-    if (!user) return createResponse(false, 'เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธนเนเนเธเน');
+    if (!user) return createResponse(false, 'ไม่พบข้อมูลผู้ใช้');
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return createResponse(false, 'เนเธกเนเธเธ Sheet เธเธเธเธฃเธฐเธกเธฒเธ“');
+    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
     const data = budgetSheet.getDataRange().getValues();
-    if (!data || data.length < 2) return createResponse(false, 'Sheet เธเธเธเธฃเธฐเธกเธฒเธ“เนเธกเนเธกเธตเธเนเธญเธกเธนเธฅ');
+    if (!data || data.length < 2) return createResponse(false, 'Sheet งบประมาณไม่มีข้อมูล');
     const cols = getColumnIndices(data[0]);
     const transferTotals = getTransferTotalsByItemId();
     const workSummary = {};
@@ -170,7 +170,7 @@ function getDashboardData() {
       const row  = data[i];
       const dept = row[cols.department] || '';
       if (!hasAccessToRow(user, dept)) continue;
-      const work = row[cols.work] || 'เนเธกเนเธฃเธฐเธเธธ';
+      const work = row[cols.work] || 'ไม่ระบุ';
       if (!workSummary[work]) workSummary[work] = { work, totalBudget:0, totalUsed:0, totalTransferIn:0, totalTransferOut:0, totalRemaining:0, items:0 };
       const itemId = normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : '');
       const transfer = transferTotals[itemId] || {};
@@ -184,18 +184,18 @@ function getDashboardData() {
     return createResponse(true, '', { data: Object.values(workSummary), user });
   } catch (error) {
     handleError('getDashboardData', error);
-    return createResponse(false, 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + error.toString());
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + error.toString());
   }
 }
 
 function getWorkDetails(workName) {
   try {
     const user = getUserPermission();
-    if (!user) return createResponse(false, 'เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธนเนเนเธเน');
+    if (!user) return createResponse(false, 'ไม่พบข้อมูลผู้ใช้');
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return createResponse(false, 'เนเธกเนเธเธ Sheet เธเธเธเธฃเธฐเธกเธฒเธ“');
+    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
     const data = budgetSheet.getDataRange().getValues();
-    if (!data || data.length < 2) return createResponse(false, 'Sheet เธเธเธเธฃเธฐเธกเธฒเธ“เนเธกเนเธกเธตเธเนเธญเธกเธนเธฅ');
+    if (!data || data.length < 2) return createResponse(false, 'Sheet งบประมาณไม่มีข้อมูล');
     const cols = getColumnIndices(data[0]);
     const transferTotals = getTransferTotalsByItemId();
     const detailedData = [];
@@ -206,11 +206,11 @@ function getWorkDetails(workName) {
       const itemId = normalizeItemId((cols.itemId !== -1 && row[cols.itemId]) ? row[cols.itemId].toString().trim() : '');
       const transfer = transferTotals[itemId] || {};
       detailedData.push({
-        work:        row[cols.work]        || 'เนเธกเนเธฃเธฐเธเธธ',
-        budgetType:  (cols.budgetType  !== -1) ? (row[cols.budgetType]  || 'เนเธกเนเธฃเธฐเธเธธ') : 'เนเธกเนเธฃเธฐเธเธธ',
-        category:    (cols.category    !== -1) ? (row[cols.category]    || 'เนเธกเนเธฃเธฐเธเธธ') : 'เนเธกเนเธฃเธฐเธเธธ',
-        expenseType: (cols.expenseType !== -1) ? (row[cols.expenseType] || 'เนเธกเนเธฃเธฐเธเธธ') : 'เนเธกเนเธฃเธฐเธเธธ',
-        item:        (cols.item        !== -1) ? (row[cols.item]        || 'เนเธกเนเธฃเธฐเธเธธ') : 'เนเธกเนเธฃเธฐเธเธธ',
+        work:        row[cols.work]        || 'ไม่ระบุ',
+        budgetType:  (cols.budgetType  !== -1) ? (row[cols.budgetType]  || 'ไม่ระบุ') : 'ไม่ระบุ',
+        category:    (cols.category    !== -1) ? (row[cols.category]    || 'ไม่ระบุ') : 'ไม่ระบุ',
+        expenseType: (cols.expenseType !== -1) ? (row[cols.expenseType] || 'ไม่ระบุ') : 'ไม่ระบุ',
+        item:        (cols.item        !== -1) ? (row[cols.item]        || 'ไม่ระบุ') : 'ไม่ระบุ',
         budget:    parseNumberSafe(row[cols.budget]),
         used:      parseNumberSafe(row[cols.used]),
         transferIn: parseNumberSafe(transfer.transferIn || 0),
@@ -221,16 +221,16 @@ function getWorkDetails(workName) {
     return createResponse(true, '', { detailedData });
   } catch (error) {
     handleError('getWorkDetails', error, { workName });
-    return createResponse(false, 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + error.toString());
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + error.toString());
   }
 }
 
 function checkBudgetAlerts() {
   try {
     const user = getUserPermission();
-    if (!user) return { success: false, message: 'เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธนเนเนเธเน', alerts: [] };
+    if (!user) return { success: false, message: 'ไม่พบข้อมูลผู้ใช้', alerts: [] };
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return { success: false, message: 'เนเธกเนเธเธ Sheet เธเธเธเธฃเธฐเธกเธฒเธ“', alerts: [] };
+    if (!budgetSheet) return { success: false, message: 'ไม่พบ Sheet งบประมาณ', alerts: [] };
     const data = budgetSheet.getDataRange().getValues();
     if (!data || data.length < 2) return { success: true, message: '', alerts: [] };
     const cols   = getColumnIndices(data[0]);
@@ -261,7 +261,7 @@ function checkBudgetAlerts() {
     return { success: true, message: '', alerts };
   } catch (error) {
     handleError('checkBudgetAlerts', error);
-    return { success: false, message: 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”: ' + (error?.message || error?.toString()), alerts: [] };
+    return { success: false, message: 'เกิดข้อผิดพลาด: ' + (error?.message || error?.toString()), alerts: [] };
   }
 }
 
