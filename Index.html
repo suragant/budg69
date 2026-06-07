@@ -296,34 +296,35 @@
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <div class="header app-commandbar">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">BG</div>
         <div>
-          <h1>ระบบสารสนเทศในการบริหารงบประมาณ</h1>
-          <div id="userEmail" style="font-size: 14px; color: #666;" aria-live="polite" aria-label="อีเมลผู้ใช้">
+          <h1>ระบบบริหารงบประมาณ</h1>
+          <div id="userEmail" class="user-line" aria-live="polite" aria-label="อีเมลผู้ใช้">
             กำลังโหลด...
           </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-          <div id="alertBadge" style="position: relative; display: none;">
-            <button class="btn btn-secondary" data-action="show-alerts" aria-label="แสดงแจ้งเตือน" aria-pressed="false" id="alertsButton" style="position: relative;">
-              แจ้งเตือน
-              <span id="alertCount" aria-live="polite" aria-atomic="true" style="position: absolute; top: -8px; right: -8px; background: #ff4444; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;"></span>
-            </button>
-          </div>
-
-          <button class="btn btn-primary" data-action="show-dashboard" aria-label="แสดง Dashboard">
-            Dashboard
-          </button>
-
-          <button class="btn btn-secondary" data-action="open-transfer" id="transferBudgetBtn" style="display:none;" aria-label="โอนงบประมาณ">
-            โอนงบ
-          </button>
-
-          <button class="btn btn-secondary" data-action="logout" aria-label="ออกจากระบบ">
-            ออกจากระบบ
+      </div>
+      <div class="command-actions">
+        <div id="alertBadge" class="alert-badge" style="display: none;">
+          <button class="btn btn-secondary btn-with-badge" data-action="show-alerts" aria-label="แสดงแจ้งเตือน" aria-pressed="false" id="alertsButton">
+            แจ้งเตือน
+            <span id="alertCount" class="count-badge" aria-live="polite" aria-atomic="true"></span>
           </button>
         </div>
+
+        <button class="btn btn-primary" data-action="show-dashboard" aria-label="แสดง Dashboard">
+          Dashboard
+        </button>
+
+        <button class="btn btn-secondary" data-action="open-transfer" id="transferBudgetBtn" style="display:none;" aria-label="โอนงบประมาณ">
+          โอนงบ
+        </button>
+
+        <button class="btn btn-ghost" data-action="logout" aria-label="ออกจากระบบ">
+          ออกจากระบบ
+        </button>
       </div>
     </div>
 
@@ -333,7 +334,41 @@
 
     <div id="errorContainer" style="display: none;" role="alert" aria-live="assertive" aria-atomic="true"></div>
 
+    <section class="summary-strip" aria-label="ภาพรวมงบประมาณ">
+      <div class="summary-metric">
+        <span>งบประมาณรวม</span>
+        <strong id="budgetTotalAmount">0.00</strong>
+      </div>
+      <div class="summary-metric">
+        <span>เบิกจ่ายแล้ว</span>
+        <strong id="budgetUsedAmount">0.00</strong>
+      </div>
+      <div class="summary-metric">
+        <span>คงเหลือ</span>
+        <strong id="budgetRemainingAmount">0.00</strong>
+      </div>
+      <div class="summary-metric summary-metric-alert">
+        <span>รายการที่ต้องติดตาม</span>
+        <strong id="budgetAlertTotal">0</strong>
+      </div>
+    </section>
+
     <div id="searchFilterSection" class="search-filter-section" style="display: none;">
+      <div class="filter-heading">
+        <div>
+          <h2>รายการงบประมาณ</h2>
+          <div class="filter-summary">
+            <span id="filterResultCount" aria-live="polite" aria-atomic="true">แสดง 0 รายการ</span>
+            <span id="filterWarning" style="display: none;" role="alert">
+              <span id="warningCount">0</span> รายการใกล้หมดงบ
+            </span>
+          </div>
+        </div>
+        <button class="btn btn-secondary" data-action="reset-filters" aria-label="ล้างตัวกรองทั้งหมด">
+          ล้างตัวกรอง
+        </button>
+      </div>
+
       <div class="search-grid">
         <div class="search-field">
           <label class="search-label" for="searchItemId">ค้นหา Item ID</label>
@@ -341,24 +376,24 @@
         </div>
 
         <div class="search-field">
-          <label class="search-label" for="searchItem">ค้นหารายการ</label>
+          <label class="search-label" for="searchItem">รายการ</label>
           <input type="text" id="searchItem" class="search-input" placeholder="ชื่อรายการ" aria-label="ค้นหารายการ">
         </div>
 
         <div class="search-field">
-          <label class="search-label" for="searchWork">ค้นหางาน</label>
+          <label class="search-label" for="searchWork">งาน</label>
           <input type="text" id="searchWork" class="search-input" placeholder="ชื่องาน" aria-label="ค้นหางาน">
         </div>
 
         <div class="search-field">
-          <label class="search-label" for="searchDepartment">ค้นหาหน่วยงาน</label>
+          <label class="search-label" for="searchDepartment">หน่วยงาน</label>
           <input type="text" id="searchDepartment" class="search-input" placeholder="สำนัก/กอง" aria-label="ค้นหาหน่วยงาน">
         </div>
       </div>
 
       <div class="filter-controls">
         <div class="filter-group">
-          <label class="filter-label" for="budgetStatusFilter">สถานะงบประมาณ:</label>
+          <label class="filter-label" for="budgetStatusFilter">สถานะงบประมาณ</label>
           <select id="budgetStatusFilter" class="filter-select" aria-label="ตัวกรองสถานะงบประมาณ">
             <option value="all">ทั้งหมด</option>
             <option value="available">ยังเหลืองบ (&lt;80%)</option>
@@ -369,7 +404,7 @@
         </div>
 
         <div class="filter-group">
-          <label class="filter-label" for="sortFilter">เรียงตาม:</label>
+          <label class="filter-label" for="sortFilter">เรียงตาม</label>
           <select id="sortFilter" class="filter-select" aria-label="เรียงลำดับ">
             <option value="default">ค่าเริ่มต้น</option>
             <option value="budget-desc">งบประมาณ (มาก-น้อย)</option>
@@ -381,17 +416,6 @@
             <option value="percent-desc">% การใช้ (มาก-น้อย)</option>
           </select>
         </div>
-
-        <button class="btn btn-secondary" data-action="reset-filters" aria-label="ล้างตัวกรองทั้งหมด" style="margin-left: auto;">
-          ล้างตัวกรอง
-        </button>
-      </div>
-
-      <div class="filter-summary">
-        <span id="filterResultCount" aria-live="polite" aria-atomic="true">แสดง 0 รายการ</span>
-        <span id="filterWarning" style="display: none; color: #FF9800; margin-left: 15px;" role="alert">
-          <span id="warningCount">0</span> รายการใกล้หมดงบ
-        </span>
       </div>
     </div>
 

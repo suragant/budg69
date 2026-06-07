@@ -106,23 +106,35 @@
     var main = document.querySelector('.container') || document.body;
     var wrapper = document.createElement('div');
     wrapper.id = 'supportPanelWrapper';
-    wrapper.style.background = '#fff';
-    wrapper.style.padding = '12px';
-    wrapper.style.borderRadius = '8px';
-    wrapper.style.marginBottom = '12px';
-    wrapper.style.boxShadow = '0 4px 8px rgba(0,0,0,0.06)';
+    wrapper.className = 'support-sidebar-panel';
     wrapper.innerHTML = '\
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">\
-        <div style="font-size:18px;font-weight:700;color:#667eea;">📋 งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</div>\
-        <div><button id="supportBackBtn" class="btn btn-secondary">กลับ</button></div>\
+      <div class="support-sidebar-head">\
+        <div class="support-sidebar-title-row">\
+          <div class="support-sidebar-icon" aria-hidden="true">SP</div>\
+          <div>\
+            <div class="support-sidebar-kicker">เงินอุดหนุน</div>\
+            <div class="support-sidebar-title">งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</div>\
+          </div>\
+        </div>\
+        <div><button id="supportBackBtn" class="btn btn-secondary support-back-btn">กลับ</button></div>\
       </div>\
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">\
-        <label>ปี:</label>\
-        <select id="supportYear"></select>\
-        <div style="display:flex;align-items:center;gap:8px;"><label style="color:#666;">เริ่มงบเดือน:</label><div style="padding:6px 10px;border-radius:6px;background:#f5f5f5;color:#333;font-weight:600;">ต.ค.</div></div>\
+      <div class="support-sidebar-body">\
+        <div class="support-sidebar-summary">\
+          <span>เลือกปีงบประมาณและโหลดรายการอุดหนุนเพื่อบันทึกเบิกและดูประวัติได้ทันที</span>\
+        </div>\
+        <div class="support-sidebar-field">\
+          <label for="supportYear">ปีงบประมาณ</label>\
+          <select id="supportYear"></select>\
+        </div>\
+        <div class="support-sidebar-field">\
+          <label>เริ่มงบเดือน</label>\
+          <div class="support-sidebar-static">ต.ค.</div>\
+        </div>\
         <input type="hidden" id="supportFiscal" value="10">\
-        <button id="supportLoad" class="btn btn-primary">โหลด</button>\
-        <button id="supportExport" class="btn btn-secondary">Export PDF</button>\
+        <div class="support-sidebar-actions">\
+          <button id="supportLoad" class="btn btn-primary">โหลด</button>\
+          <button id="supportExport" class="btn btn-secondary">Export PDF</button>\
+        </div>\
       </div>';
 
     if(main.children && main.children.length > 0) main.insertBefore(wrapper, main.children[0]); else main.appendChild(wrapper);

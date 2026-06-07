@@ -16,7 +16,7 @@ function getUserPermission() {
     let usersSheet = resolveSheet(CONFIG.SHEETS.USERS);
     if (!usersSheet) {
       usersSheet = ss.insertSheet(CONFIG.SHEETS.USERS);
-      usersSheet.appendRow(['Email', 'เธชเธณเธเธฑเธ/เธเธญเธ', 'Role']);
+      usersSheet.appendRow(['Email', 'สำนัก/กอง', 'Role']);
       return null;
     }
     const data = usersSheet.getDataRange().getValues();

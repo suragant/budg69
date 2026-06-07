@@ -75,6 +75,74 @@ function getTransactionLogColumnIndices(headers) {
   };
 }
 
+function getTransactionLogHeaders() {
+  return [
+    'Timestamp',
+    'Expense Date',
+    'User',
+    'Item ID',
+    'Amount',
+    'Description',
+    'New Used',
+    'New Remaining',
+    'Quantity',
+    'Type',
+    'Status',
+    'Edited By'
+  ];
+}
+
+function ensureTransactionLogSheet() {
+  const ss = getSpreadsheet();
+  let logSheet = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
+  if (!logSheet) {
+    logSheet = ss.insertSheet(CONFIG.SHEETS.TRANSACTION_LOG);
+    logSheet.appendRow(getTransactionLogHeaders());
+    try { logSheet.getRange('D:D').setNumberFormat('@'); } catch (e) {}
+  }
+  return logSheet;
+}
+
+function getTransactionLogContext(logSheet) {
+  const sheet = logSheet || resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
+  if (!sheet) return null;
+
+  const lastCol = sheet.getLastColumn();
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) {
+    return (h || '').toString().trim();
+  });
+
+  return {
+    sheet: sheet,
+    lastCol: lastCol,
+    headers: headers,
+    logCols: getTransactionLogColumnIndices(headers)
+  };
+}
+
+function getTransactionLogRowModel(row, logCols, rowIndex) {
+  row = row || [];
+  logCols = logCols || getTransactionLogColumnIndices([]);
+
+  return {
+    logRowIndex: rowIndex || 0,
+    timestamp: row[0],
+    expenseDate: row[1],
+    user: (row[logCols.user] || '') + '',
+    itemId: normalizeItemId((row[logCols.itemId] || '') + ''),
+    amount: (typeof row[logCols.amount] === 'number') ? row[logCols.amount] : parseNumberSafe(row[logCols.amount]),
+    description: (row[5] || '') + '',
+    newUsed: (typeof row[6] === 'number') ? row[6] : parseNumberSafe(row[6]),
+    newRemaining: (typeof row[7] === 'number') ? row[7] : parseNumberSafe(row[7]),
+    quantity: logCols.quantity !== -1
+      ? ((typeof row[logCols.quantity] === 'number') ? row[logCols.quantity] : parseNumberSafe(row[logCols.quantity]))
+      : 0,
+    type: (row[logCols.type] || '') + '',
+    status: logCols.status !== -1 ? (row[logCols.status] || 'ACTIVE') + '' : 'ACTIVE',
+    editedBy: logCols.editedBy !== -1 ? (row[logCols.editedBy] || '') + '' : ''
+  };
+}
+
 function normalizeItemId(id) {
   const idStr = (id || '').toString().trim();
   if (!idStr) return '';
@@ -100,44 +168,93 @@ function normalizeItemId(id) {
   return idStr.toUpperCase();
 }
 
-function findRowIndexByItemId(itemId) {
-  const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-  if (!budgetSheet) return null;
-  const data = budgetSheet.getDataRange().getValues();
-  if (!data || data.length < 2) return null;
-  const cols = getColumnIndices(data[0]);
-  const idColIndex = cols.itemId >= 0 ? cols.itemId : 0;
-  const searchNorm = normalizeItemId((itemId || '').toString().trim());
-  if (!searchNorm) return null;
+function getItemIdTrailingNumber(value) {
+  const match = String(value || '').match(/(\d+)\s*$/);
+  return match ? parseInt(match[1], 10) : null;
+}
 
-  function trailingNumber(s) {
-    const m = String(s || '').match(/(\d+)\s*$/);
-    return m ? parseInt(m[1], 10) : null;
+function getItemIdPrefix(value) {
+  return String(value || '').replace(/[\-\s]*\d+\s*$/, '').trim().toUpperCase();
+}
+
+function itemIdsMatch(cellValue, itemId) {
+  const searchRaw = String(itemId || '').trim();
+  const cellRaw = String(cellValue || '').trim();
+  if (!searchRaw || !cellRaw) return false;
+
+  const searchNorm = normalizeItemId(searchRaw);
+  const cellNorm = normalizeItemId(cellRaw);
+  if (searchNorm && cellNorm && cellNorm.toUpperCase() === searchNorm.toUpperCase()) {
+    return true;
   }
 
-  function prefixBefore(s) {
-    return String(s || '').replace(/[\-\s]*\d+\s*$/, '').trim().toUpperCase();
+  const searchTrailing = getItemIdTrailingNumber(searchRaw);
+  const cellTrailing = getItemIdTrailingNumber(cellRaw);
+  if (searchTrailing !== null && cellTrailing !== null) {
+    const searchPrefix = getItemIdPrefix(searchRaw);
+    const cellPrefix = getItemIdPrefix(cellRaw);
+    if (searchPrefix) {
+      return cellPrefix === searchPrefix && Number(cellTrailing) === Number(searchTrailing);
+    }
+    return Number(cellTrailing) === Number(searchTrailing);
   }
 
-  const searchTrailing = trailingNumber(itemId);
-  const searchPrefix = prefixBefore(itemId);
+  return cellRaw.toUpperCase() === searchRaw.toUpperCase();
+}
 
-  for (let i = 1; i < data.length; i++) {
-    const cellVal = (data[i][idColIndex] || '').toString().trim();
+function findBudgetRowIndicesByItemIds(itemIds, data, cols) {
+  const searchIds = Array.isArray(itemIds) ? itemIds : [itemIds];
+  const targets = searchIds
+    .map(id => normalizeItemId((id || '').toString().trim()))
+    .filter(Boolean);
+  const found = {};
+
+  targets.forEach(target => {
+    found[target.toUpperCase()] = null;
+  });
+  if (!targets.length) return found;
+
+  const budgetData = data || (function() {
+    const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
+    return budgetSheet ? budgetSheet.getDataRange().getValues() : [];
+  })();
+  if (!budgetData || budgetData.length < 2) return found;
+
+  const columnMap = cols || getColumnIndices(budgetData[0]);
+  const idColIndex = columnMap.itemId >= 0 ? columnMap.itemId : 0;
+
+  for (let i = 1; i < budgetData.length; i++) {
+    const cellVal = (budgetData[i][idColIndex] || '').toString().trim();
     if (!cellVal) continue;
-    const cellNorm = normalizeItemId(cellVal);
-    if (cellNorm.toUpperCase() === searchNorm.toUpperCase()) return i + 1;
-    const cellTrailing = trailingNumber(cellVal);
-    if (searchTrailing !== null && cellTrailing !== null) {
-      const cellPrefix = prefixBefore(cellVal);
-      if (searchPrefix) {
-        if (cellPrefix === searchPrefix && Number(cellTrailing) === Number(searchTrailing)) return i + 1;
-      } else {
-        if (Number(cellTrailing) === Number(searchTrailing)) return i + 1;
+
+    for (let j = 0; j < targets.length; j++) {
+      const target = targets[j];
+      const targetKey = target.toUpperCase();
+      if (found[targetKey]) continue;
+      if (itemIdsMatch(cellVal, target)) {
+        found[targetKey] = i + 1;
       }
     }
   }
-  return null;
+
+  return found;
+}
+
+function findRowIndexByItemId(itemId) {
+  const normalized = normalizeItemId((itemId || '').toString().trim());
+  if (!normalized) return null;
+  const found = findBudgetRowIndicesByItemIds([normalized]);
+  return found[normalized.toUpperCase()] || null;
+}
+
+function normalizeDateInput(dateInput) {
+  if (!dateInput) return null;
+  try {
+    const dt = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+    return isNaN(dt.getTime()) ? null : dt;
+  } catch (e) {
+    return null;
+  }
 }
 
 function createResponse(success, message = '', data = {}) {
@@ -175,8 +292,8 @@ function normalizeRoleValue(role) {
     'administrator',
     'super admin',
     'superadmin',
-    'เธเธนเนเธ”เธนเนเธฅเธฃเธฐเธเธ',
-    'เนเธญเธ”เธกเธดเธ'
+    'ผู้ดูแลระบบ',
+    'แอดมิน'
   ].includes(normalized)) {
     return 'admin';
   }
@@ -185,9 +302,9 @@ function normalizeRoleValue(role) {
     'viewer',
     'read only',
     'readonly',
-    'เธ”เธนเธญเธขเนเธฒเธเน€เธ”เธตเธขเธง',
-    'เธเธนเนเธ”เธน',
-    'เธญเนเธฒเธเธญเธขเนเธฒเธเน€เธ”เธตเธขเธง'
+    'ดูอย่างเดียว',
+    'ผู้อ่าน',
+    'อ่านอย่างเดียว'
   ].includes(normalized)) {
     return 'viewer';
   }

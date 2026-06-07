@@ -320,7 +320,13 @@
     }
 
     State.user = payload.user || State.user || null;
-    State.allItems = Array.isArray(payload.items) ? payload.items.slice() : [];
+    State.allItems = Array.isArray(payload.items)
+      ? payload.items.map(function(item) {
+          return (typeof window.normalizeBudgetViewItem === 'function')
+            ? window.normalizeBudgetViewItem(item)
+            : item;
+        })
+      : [];
     State.filteredItems = State.allItems.slice();
     State.budgetAlerts = Array.isArray(payload.alerts) ? payload.alerts.slice() : [];
 
@@ -360,6 +366,66 @@
 
     if (typeof window.renderCards === 'function') {
       window.renderCards(State.filteredItems);
+    }
+    handleInitialDeepLink();
+  }
+
+  function getInitialOpenTarget() {
+    try {
+      if (!(window.location && typeof window.location.search === 'string')) return '';
+      var search = window.location.search || '';
+      if (typeof URLSearchParams === 'function') {
+        var params = new URLSearchParams(search);
+        return String(params.get('open') || '').toLowerCase().trim();
+      }
+
+      var query = search.charAt(0) === '?' ? search.slice(1) : search;
+      var parts = query ? query.split('&') : [];
+      for (var i = 0; i < parts.length; i++) {
+        var pair = parts[i].split('=');
+        var key = decodeURIComponent((pair[0] || '').replace(/\+/g, ' '));
+        if (key === 'open') {
+          return String(decodeURIComponent((pair.slice(1).join('=') || '').replace(/\+/g, ' '))).toLowerCase().trim();
+        }
+      }
+      return '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function handleInitialDeepLink() {
+    try {
+      if (window.__initialDeepLinkHandled) return;
+      var target = getInitialOpenTarget();
+      if (!target) {
+        window.__initialDeepLinkHandled = true;
+        return;
+      }
+      if (target !== 'alerts') {
+        window.__initialDeepLinkHandled = true;
+        return;
+      }
+
+      var opener = null;
+      if (typeof window.openAlertsModal === 'function') opener = window.openAlertsModal;
+      else if (typeof window.showAlerts === 'function') opener = window.showAlerts;
+      if (!opener) {
+        window.setTimeout(handleInitialDeepLink, 200);
+        return;
+      }
+
+      window.__initialDeepLinkHandled = true;
+      setTimeout(function () {
+        try {
+          opener();
+        } catch (e) {
+          window.__initialDeepLinkHandled = false;
+          console.warn('handleInitialDeepLink alerts open failed', e);
+        }
+      }, 180);
+    } catch (e) {
+      console.warn('handleInitialDeepLink error', e);
     }
   }
 

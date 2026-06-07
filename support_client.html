@@ -98,6 +98,53 @@
 
   try { window.clientNormalizeItemId = window.clientNormalizeItemId || clientNormalizeItemId; } catch(e){}
 
+  function escapeText(value) {
+    try {
+      if (typeof window.escapeHtml === 'function') return window.escapeHtml(value);
+    } catch (e) {}
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatSupportMoney(value) {
+    return (Number(value) || 0).toLocaleString('th-TH', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function renderSupportContainerState(container, kind, message) {
+    if (!container) return;
+    container.innerHTML = '<div class="support-inline-state support-inline-state-' + escapeText(kind || 'info') + '">' + escapeText(message || '') + '</div>';
+  }
+
+  function renderSupportActionButtons(itemId) {
+    var safeId = escapeText(itemId);
+    return ''
+      + '<div class="support-fallback-actions">'
+      + '<button class="btn btn-primary record-btn" data-id="' + safeId + '" onclick="window.__support_on_btn(\'' + safeId + '\', \'record\')">บันทึก</button>'
+      + '<button class="btn btn-secondary" data-action="view-history" data-id="' + safeId + '" onclick="window.__support_on_btn(\'' + safeId + '\', \'history\')">ประวัติ</button>'
+      + '</div>';
+  }
+
+  function renderSupportFallbackCard(item) {
+    item = item || {};
+    var itemId = escapeText(item.itemId || '');
+    var itemName = escapeText(item.item || '');
+    return ''
+      + '<article class="support-fallback-card budget-card" data-item-id="' + itemId + '">'
+      + '<div class="support-fallback-card__main">'
+      + '<div><strong>' + itemId + '</strong><div class="support-fallback-card__name">' + itemName + '</div></div>'
+      + '<div class="support-fallback-card__amount"><div class="support-fallback-card__remaining">' + formatSupportMoney(item.remaining) + '</div><div class="support-fallback-card__label">คงเหลือ</div></div>'
+      + '</div>'
+      + renderSupportActionButtons(item.itemId)
+      + '</article>';
+  }
+
   // ----------------------------
   // Server call helper
   // ----------------------------
@@ -156,18 +203,17 @@
   };
 
   function fallbackCardHtml(items){
-    if(!items || items.length === 0) return '<div style="padding:12px;color:#666;">ไม่มีรายการ</div>';
-    return items.map(function(it){
-      return '<div class="budget-card" data-item-id="'+escapeHtmlForPdf(it.itemId)+'" style="padding:12px;border:1px solid #eee;margin-bottom:10px;border-radius:8px;background:#fff;">' +
-             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-             '<div><strong>'+ escapeHtmlForPdf(it.itemId || '') +'</strong><div style="color:#555">'+ escapeHtmlForPdf(it.item || '') +'</div></div>' +
-             '<div style="text-align:right;"><div style="font-weight:700;color:#2a7f6f;">'+ (Number(it.remaining)||0).toLocaleString('th-TH',{minimumFractionDigits:2}) +'</div><div style="font-size:12px;color:#999;">คงเหลือ</div></div>' +
-             '</div>' +
-             '<div style="margin-top:8px;display:flex;gap:8px;">' +
-             '<button class="btn btn-primary record-btn" data-id="'+escapeHtmlForPdf(it.itemId)+'" onclick="window.__support_on_btn(\''+escapeHtmlForPdf(it.itemId)+'\', \'record\')">บันทึก</button>' +
-             '<button class="btn" data-action="view-history" data-id="'+escapeHtmlForPdf(it.itemId)+'" onclick="window.__support_on_btn(\''+escapeHtmlForPdf(it.itemId)+'\', \'history\')" style="background:#efefef;">ประวัติ</button>' +
-             '</div></div>';
-    }).join('');
+    if(!items || items.length === 0) return '<div class="support-inline-state">ไม่มีรายการ</div>';
+    return items.map(renderSupportFallbackCard).join('');
+  }
+
+  function normalizeSupportItem(it) {
+    var normalized = (typeof window.normalizeSupportViewItem === 'function')
+      ? window.normalizeSupportViewItem(it)
+      : (it || {});
+    normalized.canEdit = true;
+    normalized._raw = it;
+    return normalized;
   }
 
   // loadSupportItemsList
@@ -190,84 +236,51 @@
       }
 
       attempts = 0;
-      container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:#666;">กำลังโหลดรายการ ' + LONG_NAME + '...</div>';
-      try{
+      renderSupportContainerState(container, 'info', 'กำลังโหลดรายการ ' + LONG_NAME + '...');
+
+      try {
         callServer('getSupportItemsSupport', []).then(function(res){
           try {
-            if(!res || !res.success){
-              container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:red;">เกิดข้อผิดพลาด: '+ ((res && res.message) || 'Unknown') +'</div>';
+            if (!res || !res.success) {
+              renderSupportContainerState(container, 'error', 'เกิดข้อผิดพลาด: ' + ((res && res.message) || 'Unknown'));
               return;
             }
 
-            var items = (res.items || []).map(function(it){
-              var rawId = (it && (it.itemId || it.rowIndex)) ? (it.itemId || it.rowIndex) : '';
-              var itemIdClient = clientNormalizeItemId(rawId);
-              return {
-                itemId: itemIdClient,
-                rowIndex: it.rowIndex,
-                department: it.department || '',
-                work: it.work || it.area || it.department || '',
-                budgetType: it.budgetType || it.budgetCategory || '',
-                category: it.category||'',
-                expenseType: it.expenseType||'',
-                item: it.item || it.itemName || '',
-                budget: Number(it.budget||0)||0,
-                used: Number(it.used||0)||0,
-                remaining: Number(it.remaining||0)||0,
-                quantityUsed: Number(it.usedQuantity != null ? it.usedQuantity : (it.quantityUsed != null ? it.quantityUsed : (it.usedQty != null ? it.usedQty : 0))) || 0,
-                allocatedQuantity: Number(it.allocatedQuantity != null ? it.allocatedQuantity : (it.allocatedQty != null ? it.allocatedQty : 0)) || 0,
-                canEdit: true,
-                _raw: it
-              };
-            });
-
+            var items = (res.items || []).map(normalizeSupportItem);
             window.State = window.State || {};
             State.allItems = items;
             State.filteredItems = items.slice();
 
-            try{
-              if (containerId === 'supportBudgetContainer' && typeof window.createBudgetCard === 'function') {
+            try {
+              if (typeof window.createBudgetCard === 'function') {
                 container.innerHTML = items.map(function(it){ return window.createBudgetCard(it || {}); }).join('');
                 try { if (typeof attachSupportInlineQuickEntry === 'function') attachSupportInlineQuickEntry(); } catch(e){}
-                try { bindSupportExpenseButtons(containerId); } catch(e){}
-              } else if (containerId === 'supportBudgetContainer' && typeof window.renderCards === 'function') {
-                container.innerHTML = items.map(function(it){ return (typeof window.createBudgetCard === 'function') ? window.createBudgetCard(it) : fallbackCardHtml([it]); }).join('');
-                try { bindSupportExpenseButtons(containerId); } catch(e){}
               } else {
-                container.innerHTML = (items && items.length) ? items.map(function(it){
-                  return '<div class="budget-card" data-item-id="'+escapeHtmlForPdf(it.itemId)+'" style="padding:12px;border:1px solid #eee;margin-bottom:10px;border-radius:8px;background:#fff;">' +
-                         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-                         '<div><strong>'+ escapeHtmlForPdf(it.itemId) +'</strong><div style="color:#555">'+ escapeHtmlForPdf(it.item||'') +'</div></div>' +
-                         '<div style="text-align:right;"><div style="font-weight:700;color:#2a7f6f;">'+ (Number(it.remaining)||0).toLocaleString('th-TH',{minimumFractionDigits:2}) +'</div><div style="font-size:12px;color:#999;">คงเหลือ</div></div>' +
-                         '</div>' +
-                         '<div class="card-actions" style="margin-top:8px;display:flex;gap:8px;">' +
-                         '<button class="btn btn-primary record-btn" data-id="'+escapeHtmlForPdf(it.itemId)+'" onclick="window.__support_on_btn(\''+escapeHtmlForPdf(it.itemId)+'\', \'record\')">บันทึก</button>' +
-                         '<button class="btn" data-action="view-history" data-id="'+escapeHtmlForPdf(it.itemId)+'" onclick="window.__support_on_btn(\''+escapeHtmlForPdf(it.itemId)+'\', \'history\')" style="background:#efefef;">ประวัติ</button>' +
-                         '</div></div>';
-                }).join('') : '<div style="padding:12px;color:#666;">ไม่มีรายการ</div>';
-                try { bindSupportExpenseButtons(containerId); } catch(e){}
+                container.innerHTML = fallbackCardHtml(items);
               }
-            }catch(e){
-              console.warn('render support items failed, fallback used', e);
+              try { bindSupportExpenseButtons(containerId); } catch(e){ console.warn(e); }
+            } catch (renderErr) {
+              console.warn('render support items failed, fallback used', renderErr);
               container.innerHTML = fallbackCardHtml(items);
+              try { bindSupportExpenseButtons(containerId); } catch(e){ console.warn(e); }
             }
 
-            setTimeout(function(){ 
+            setTimeout(function(){
               try { bindSupportExpenseButtons(containerId); } catch(e) { console.warn(e); }
             }, 80);
-
-          } catch(inner){
+          } catch(inner) {
             console.error('loadSupportItemsList handler error', inner);
-            container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:red;">client error</div>';
+            renderSupportContainerState(container, 'error', 'client error');
           }
         }).catch(function(err){
           console.warn('getSupportItemsSupport failed', err);
-          container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:red;">เกิดข้อผิดพลาด: '+ String(err) +'</div>';
+          renderSupportContainerState(container, 'error', 'เกิดข้อผิดพลาด: ' + String(err));
         });
-      }catch(e){
-        container.innerHTML = '<div style="grid-column:1/-1;padding:12px;color:red;">client error: '+ String(e) +'</div>';
+      } catch (e) {
+        renderSupportContainerState(container, 'error', 'client error: ' + String(e));
       }
     }
+
     _tryLoad();
   }
 
@@ -409,27 +422,19 @@
 
   try {
     window.normalizeSupportViewItem = window.normalizeSupportViewItem || function(it) {
-      it = it || {};
-      var normalized = {
-        itemId: clientNormalizeItemId(it.itemId || it.id || ''),
-        rowIndex: Number(it.rowIndex || 0) || 0,
-        department: String(it.department || '').trim(),
-        work: String(it.work || it.area || it.department || '').trim(),
-        budgetType: String(it.budgetType || it.budgetCategory || '').trim(),
-        expenseType: String(it.expenseType || '').trim(),
-        item: String(it.item || it.itemName || '').trim(),
-        allocatedQuantity: Number(it.allocatedQuantity != null ? it.allocatedQuantity : (it.allocatedQty != null ? it.allocatedQty : 0)) || 0,
-        usedQuantity: Number(it.usedQuantity != null ? it.usedQuantity : (it.quantityUsed != null ? it.quantityUsed : (it.usedQty != null ? it.usedQty : 0))) || 0,
-        budget: Number(it.budget || 0) || 0,
-        used: Number(it.used || 0) || 0,
-        remaining: Number(it.remaining || 0) || 0
-      };
+      var base = (typeof window.normalizeBudgetViewItem === 'function')
+        ? window.normalizeBudgetViewItem(it)
+        : (it || {});
+      var normalized = Object.assign({}, base, {
+        itemId: clientNormalizeItemId(base.itemId || base.id || '')
+      });
       normalized.area = normalized.work;
       normalized.budgetCategory = normalized.budgetType;
       normalized.allocatedQty = normalized.allocatedQuantity;
       normalized.quantityUsed = normalized.usedQuantity;
       normalized.usedQty = normalized.usedQuantity;
       normalized.itemName = normalized.item;
+      normalized._raw = base._raw || it || base;
       return normalized;
     };
   } catch(e){}

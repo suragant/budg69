@@ -174,20 +174,6 @@ function findRowIndexInSheetSupport(itemId) {
     const searchRaw = (itemId || '').toString().trim();
     if (!searchRaw) return null;
     const searchNorm = normalizeItemId(searchRaw).toUpperCase();
-
-    function trailingNumber(value) {
-      if (!value) return null;
-      const match = String(value).match(/(\d+)\s*$/);
-      return match ? parseInt(match[1], 10) : null;
-    }
-
-    function prefixBeforeTrailingNumber(value) {
-      if (!value) return '';
-      return String(value).replace(/[-_\s]*\d+\s*$/, '').trim().toUpperCase();
-    }
-
-    const searchTrailing = trailingNumber(searchRaw);
-    const searchPrefix = prefixBeforeTrailingNumber(searchRaw);
     const tried = [];
 
     for (let i = 1; i < data.length; i++) {
@@ -201,27 +187,8 @@ function findRowIndexInSheetSupport(itemId) {
       const cellNorm = normalizeItemId(cellVal).toUpperCase();
       tried.push({ row: i + 1, cell: cellVal, cellNorm: cellNorm });
 
-      if (searchNorm && cellNorm === searchNorm) {
+      if (itemIdsMatch(cellVal, searchRaw)) {
         Logger.log('findRowIndexInSheetSupport: exact normalized match row=%s cell="%s"', i + 1, cellVal);
-        return i + 1;
-      }
-
-      const cellTrailing = trailingNumber(cellVal);
-      if (searchTrailing !== null && cellTrailing !== null) {
-        const cellPrefix = prefixBeforeTrailingNumber(cellVal);
-        if (searchPrefix) {
-          if (cellPrefix === searchPrefix && Number(cellTrailing) === Number(searchTrailing)) {
-            Logger.log('findRowIndexInSheetSupport: prefix+number match row=%s cell="%s"', i + 1, cellVal);
-            return i + 1;
-          }
-        } else if (Number(cellTrailing) === Number(searchTrailing)) {
-          Logger.log('findRowIndexInSheetSupport: number-only match row=%s cell="%s"', i + 1, cellVal);
-          return i + 1;
-        }
-      }
-
-      if (cellVal.toUpperCase() === searchRaw.toUpperCase()) {
-        Logger.log('findRowIndexInSheetSupport: case-insensitive raw match row=%s cell="%s"', i + 1, cellVal);
         return i + 1;
       }
     }
@@ -243,9 +210,9 @@ function findRowIndexInSheetSupport(itemId) {
 }
 
 function recordSupportExpenseSupport(itemId, amount, description, expenseDate, quantity) {
-  const lock = LockService.getScriptLock();
+  const lock = acquireLockWithRetry();
   try {
-    if (!lock.tryLock(5000)) {
+    if (!lock) {
       return createResponse(false, 'ระบบกำลังปรับปรุงข้อมูล กรุณาลองใหม่อีกครั้ง');
     }
 
@@ -267,12 +234,12 @@ function recordSupportExpenseSupport(itemId, amount, description, expenseDate, q
     }
 
     const rowVals = sheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0];
-    const addQty = Number(quantity || 0) || 0;
-    const addAmt = Number(amount || 0) || 0;
+    const addQty = parseNumberSafe(quantity || 0);
+    const addAmt = parseNumberSafe(amount || 0);
 
     let newUsedQty = null;
     if (_isValidIndex(map.usedQty)) {
-      const currentQty = Number(rowVals[map.usedQty] || 0) || 0;
+      const currentQty = parseNumberSafe(rowVals[map.usedQty] || 0);
       newUsedQty = Number((currentQty + addQty).toFixed(2));
       sheet.getRange(rowIndex, map.usedQty + 1).setValue(newUsedQty);
     }
@@ -280,8 +247,8 @@ function recordSupportExpenseSupport(itemId, amount, description, expenseDate, q
     let newUsedMoney = null;
     let newRemainingMoney = null;
     if (_isValidIndex(map.usedMoney)) {
-      const currentUsed = Number(rowVals[map.usedMoney] || 0) || 0;
-      const budget = _isValidIndex(map.budgetMoney) ? Number(rowVals[map.budgetMoney] || 0) : 0;
+      const currentUsed = parseNumberSafe(rowVals[map.usedMoney] || 0);
+      const budget = _isValidIndex(map.budgetMoney) ? parseNumberSafe(rowVals[map.budgetMoney] || 0) : 0;
       newUsedMoney = Number((currentUsed + addAmt).toFixed(2));
       sheet.getRange(rowIndex, map.usedMoney + 1).setValue(newUsedMoney);
 
@@ -292,43 +259,7 @@ function recordSupportExpenseSupport(itemId, amount, description, expenseDate, q
     }
 
     try {
-      if (typeof logTransaction === 'function') {
-        try {
-          logTransaction(itemId, addAmt, description, expenseDate, newUsedMoney, newRemainingMoney, 'support', addQty);
-        } catch (e) {
-          const ss = getSpreadsheet();
-          let logSheet = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
-          if (!logSheet) logSheet = ss.insertSheet(CONFIG.SHEETS.TRANSACTION_LOG);
-          logSheet.appendRow([
-            new Date(),
-            expenseDate,
-            getUserEmail(),
-            normalizeItemId(itemId),
-            addAmt,
-            description,
-            newUsedMoney,
-            newRemainingMoney,
-            addQty,
-            'support'
-          ]);
-        }
-      } else {
-        const ss2 = getSpreadsheet();
-        let logSheet2 = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
-        if (!logSheet2) logSheet2 = ss2.insertSheet(CONFIG.SHEETS.TRANSACTION_LOG);
-        logSheet2.appendRow([
-          new Date(),
-          expenseDate,
-          getUserEmail(),
-          normalizeItemId(itemId),
-          addAmt,
-          description,
-          newUsedMoney,
-          newRemainingMoney,
-          addQty,
-          'support'
-        ]);
-      }
+      logTransaction(itemId, addAmt, description, expenseDate, newUsedMoney, newRemainingMoney, 'support', addQty);
     } catch (e) {
       Logger.log('recordSupportExpenseSupport log error: ' + e.toString());
     }
@@ -383,34 +314,26 @@ function getSupportQuarterlyReport(year, fiscalStartMonth) {
 
     const byArea = {};
     const byExpenseType = {};
-    const logSheet = resolveSheet(CONFIG.SHEETS.TRANSACTION_LOG);
+    const logContext = getTransactionLogContext();
 
-    if (logSheet) {
-      const logData = logSheet.getDataRange().getValues();
+    if (logContext) {
+      const logData = logContext.sheet.getDataRange().getValues();
       if (logData && logData.length > 1) {
-        const logHeaders = logData[0].map(function(h) {
-          return (h || '').toString().trim().toLowerCase();
-        });
-        const colTimestamp = logHeaders.indexOf('timestamp') >= 0 ? logHeaders.indexOf('timestamp') : 0;
-        const colItem = logHeaders.indexOf('item id') >= 0 ? logHeaders.indexOf('item id') : 3;
-        const colAmount = logHeaders.indexOf('amount') >= 0 ? logHeaders.indexOf('amount') : 4;
-        const colType = logHeaders.indexOf('type') >= 0 ? logHeaders.indexOf('type') : (logHeaders.length - 1);
-
         for (let i = 1; i < logData.length; i++) {
           try {
-            const row = logData[i];
-            const typeVal = (row[colType] || '').toString().trim().toLowerCase();
+            const entry = getTransactionLogRowModel(logData[i], logContext.logCols, i + 1);
+            const typeVal = (entry.type || '').toString().trim().toLowerCase();
             if (typeVal !== 'support') continue;
 
-            const ts = new Date(row[colTimestamp]);
+            const ts = new Date(entry.timestamp);
             if (isNaN(ts) || ts.getFullYear() !== year) continue;
 
             const month = ts.getMonth() + 1;
             const offset = ((month - fiscalStartMonth + 12) % 12);
             const qIndex = Math.floor(offset / 3);
             const qName = 'Q' + (qIndex + 1);
-            const itemId = normalizeItemId(row[colItem] || '');
-            const amt = Number(row[colAmount] || 0) || 0;
+            const itemId = entry.itemId;
+            const amt = parseNumberSafe(entry.amount);
 
             let meta = itemsMap[itemId];
             if (!meta) {

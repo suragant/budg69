@@ -31,6 +31,45 @@
     });
   }
 
+  function normalizeBudgetViewItem(item) {
+    item = item || {};
+    var normalized = {
+      itemId: String(item.itemId || item.id || '').trim(),
+      rowIndex: Number(item.rowIndex || 0) || 0,
+      department: String(item.department || '').trim(),
+      work: String(item.work || item.area || item.department || '').trim(),
+      budgetType: String(item.budgetType || item.budgetCategory || '').trim(),
+      category: String(item.category || '').trim(),
+      expenseType: String(item.expenseType || '').trim(),
+      item: String(item.item || item.itemName || '').trim(),
+      allocatedQuantity: Number(item.allocatedQuantity != null ? item.allocatedQuantity : (item.allocatedQty != null ? item.allocatedQty : 0)) || 0,
+      usedQuantity: Number(item.usedQuantity != null ? item.usedQuantity : (item.quantityUsed != null ? item.quantityUsed : (item.usedQty != null ? item.usedQty : 0))) || 0,
+      budget: Number(item.budget || 0) || 0,
+      used: Number(item.used || 0) || 0,
+      remaining: Number(item.remaining || 0) || 0
+    };
+    normalized.area = normalized.work;
+    normalized.budgetCategory = normalized.budgetType;
+    normalized.allocatedQty = normalized.allocatedQuantity;
+    normalized.quantityUsed = normalized.usedQuantity;
+    normalized.usedQty = normalized.usedQuantity;
+    normalized.itemName = normalized.item;
+    normalized._raw = item._raw || item;
+    if (item.canEdit != null) normalized.canEdit = !!item.canEdit;
+    return normalized;
+  }
+
+  function getBudgetQuantityMeta(item) {
+    var normalized = normalizeBudgetViewItem(item);
+    var remainingQty = Number((normalized.allocatedQuantity - normalized.usedQuantity).toFixed(4));
+    return {
+      allocatedQty: normalized.allocatedQuantity,
+      usedQty: normalized.usedQuantity,
+      remainingQty: remainingQty,
+      showQtySummary: normalized.allocatedQuantity > 0 || normalized.usedQuantity > 0 || remainingQty !== 0
+    };
+  }
+
   function usagePercent(item) {
     var budget = Number(item && item.budget || 0);
     var used = Number(item && item.used || 0);
@@ -39,15 +78,39 @@
   }
 
   function progressColor(percent) {
-    if (percent >= 95) return '#f44336';
-    if (percent >= 90) return '#ff9800';
-    if (percent >= 80) return '#ffc107';
-    return '#4CAF50';
+    if (percent >= 95) return '#dc2626';
+    if (percent >= 90) return '#d97706';
+    if (percent >= 80) return '#f59e0b';
+    return '#0f766e';
+  }
+
+  function budgetStatusMeta(percent, remaining) {
+    if (Number(remaining || 0) <= 0) {
+      return { text: '\u0e2b\u0e21\u0e14\u0e07\u0e1a', className: 'status-depleted' };
+    }
+    if (percent >= 90) {
+      return { text: '\u0e40\u0e23\u0e48\u0e07\u0e15\u0e34\u0e14\u0e15\u0e32\u0e21', className: 'status-critical' };
+    }
+    if (percent >= 80) {
+      return { text: '\u0e43\u0e01\u0e25\u0e49\u0e2b\u0e21\u0e14\u0e07\u0e1a', className: 'status-watch' };
+    }
+    return { text: '\u0e1b\u0e01\u0e15\u0e34', className: 'status-ok' };
+  }
+
+  function setTextById(id, value) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (typeof window.setElementText === 'function') window.setElementText(el, value);
+    else el.textContent = value;
   }
 
   function setLoading(loading) {
     var loadingDiv = document.getElementById('loadingDiv');
     if (loadingDiv) loadingDiv.style.display = loading ? 'block' : 'none';
+  }
+
+  function renderInlineState(message, variant) {
+    return '<div class="inline-state' + (variant ? ' inline-state-' + variant : '') + '">' + escapeHtmlSafe(message || '') + '</div>';
   }
 
   function setError(message) {
@@ -59,7 +122,7 @@
       return;
     }
     errorContainer.style.display = 'block';
-    errorContainer.innerHTML = '<div style="padding:12px 16px;border-radius:8px;background:#fee;border:1px solid #f99;color:#b00020;">' + escapeHtmlSafe(message) + '</div>';
+    errorContainer.innerHTML = renderInlineState(message, 'error');
   }
 
   function setHeaderUser(user) {
@@ -77,6 +140,15 @@
     var warningCount = document.getElementById('warningCount');
     var count = Array.isArray(items) ? items.length : 0;
     var warnings = (items || []).filter(function(item){ return usagePercent(item) >= 80; }).length;
+    var totalBudget = 0;
+    var totalUsed = 0;
+    var totalRemaining = 0;
+
+    (items || []).forEach(function(item) {
+      totalBudget += Number(item && item.budget || 0);
+      totalUsed += Number(item && item.used || 0);
+      totalRemaining += Number(item && item.remaining || 0);
+    });
 
     if (resultCount) {
       var message = '\u0e41\u0e2a\u0e14\u0e07 ' + count.toLocaleString('th-TH') + ' \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23';
@@ -86,6 +158,10 @@
 
     if (filterWarning) filterWarning.style.display = warnings ? 'inline-block' : 'none';
     if (warningCount) warningCount.textContent = String(warnings);
+    setTextById('budgetTotalAmount', fmtCurrency(totalBudget));
+    setTextById('budgetUsedAmount', fmtCurrency(totalUsed));
+    setTextById('budgetRemainingAmount', fmtCurrency(totalRemaining));
+    setTextById('budgetAlertTotal', warnings.toLocaleString('th-TH'));
   }
 
   function updateAlertBadge(alerts) {
@@ -108,20 +184,17 @@
   }
 
   function createBudgetCard(item) {
-    item = item || {};
+    item = normalizeBudgetViewItem(item);
     var percent = usagePercent(item);
-    var color = progressColor(percent);
     var rawItemId = String(item.itemId || '');
     var rawWork = String(item.work || '-');
-    var allocatedQty = Number(item.allocatedQuantity != null ? item.allocatedQuantity : (item.allocatedQty != null ? item.allocatedQty : 0)) || 0;
-    var usedQty = Number(item.usedQuantity != null ? item.usedQuantity : (item.quantityUsed != null ? item.quantityUsed : (item.usedQty != null ? item.usedQty : 0))) || 0;
-    var remainingQty = Number((allocatedQty - usedQty).toFixed(4));
-    var showQtySummary = allocatedQty > 0 || usedQty > 0 || remainingQty !== 0;
+    var qtyMeta = getBudgetQuantityMeta(item);
     var itemId = escapeHtmlSafe(rawItemId);
     var work = escapeHtmlSafe(rawWork);
     var budgetType = escapeHtmlSafe(item.budgetType || '-');
     var itemName = escapeHtmlSafe(item.item || '-');
     var department = escapeHtmlSafe(item.department || '-');
+    var status = budgetStatusMeta(percent, item.remaining);
 
     return ''
       + '<article class="budget-card"'
@@ -132,12 +205,10 @@
       + ' data-budget-type="' + budgetType + '"'
       + '>'
       + '  <div class="card-header">'
-      + '    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'
-      + '      <div>'
-      + '        <div class="item-id">' + itemId + '</div>'
-      + '        <div style="font-size:16px;font-weight:700;">' + itemName + '</div>'
-      + '      </div>'
-      + '      <div style="font-size:13px;font-weight:700;">' + percent.toFixed(1) + '%</div>'
+      + '    <div class="card-title-row">'
+      + '      <div class="item-id">' + itemId + '</div>'
+      + '      <div class="card-item-name">' + itemName + '</div>'
+      + '      <div class="card-status-pill ' + status.className + '">' + status.text + '</div>'
       + '    </div>'
       + '  </div>'
       + '  <div class="card-body">'
@@ -145,11 +216,11 @@
       + '      <div><strong>\u0e2b\u0e19\u0e48\u0e27\u0e22\u0e07\u0e32\u0e19:</strong> ' + department + '</div>'
       + '      <div><strong>\u0e07\u0e32\u0e19:</strong> ' + work + '</div>'
       + '      <div><strong>\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17\u0e07\u0e1a:</strong> ' + budgetType + '</div>'
-      + (showQtySummary
-          ? '      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #dbe2f0;font-size:13px;line-height:1.6;">'
-            + '<div><strong>\u0e08\u0e33\u0e19\u0e27\u0e19\u0e08\u0e31\u0e14\u0e2a\u0e23\u0e23:</strong> ' + escapeHtmlSafe(allocatedQty) + '</div>'
-            + '<div><strong>\u0e40\u0e1a\u0e34\u0e01\u0e41\u0e25\u0e49\u0e27:</strong> ' + escapeHtmlSafe(usedQty) + '</div>'
-            + '<div><strong>\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d:</strong> ' + escapeHtmlSafe(remainingQty) + '</div>'
+      + (qtyMeta.showQtySummary
+          ? '      <div class="qty-summary">'
+            + '<div><strong>\u0e08\u0e33\u0e19\u0e27\u0e19\u0e08\u0e31\u0e14\u0e2a\u0e23\u0e23:</strong> ' + escapeHtmlSafe(qtyMeta.allocatedQty) + '</div>'
+            + '<div><strong>\u0e40\u0e1a\u0e34\u0e01\u0e41\u0e25\u0e49\u0e27:</strong> ' + escapeHtmlSafe(qtyMeta.usedQty) + '</div>'
+            + '<div><strong>\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d:</strong> ' + escapeHtmlSafe(qtyMeta.remainingQty) + '</div>'
             + '</div>'
           : '')
       + '    </div>'
@@ -157,7 +228,8 @@
       + '      <div class="summary-row"><span>\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13</span><span class="amount-budget">' + fmtCurrency(item.budget) + '</span></div>'
       + '      <div class="summary-row"><span>\u0e40\u0e1a\u0e34\u0e01\u0e08\u0e48\u0e32\u0e22</span><span class="amount-used">' + fmtCurrency(item.used) + '</span></div>'
       + '      <div class="summary-row"><span>\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d</span><span class="amount-remaining">' + fmtCurrency(item.remaining) + '</span></div>'
-      + '      <div class="progress-bar"><div class="progress-fill" style="width:' + percent.toFixed(1) + '%;background:' + color + ';"></div></div>'
+      + '      <div class="progress-meta"><span>\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e07\u0e1a</span><span>' + percent.toFixed(1) + '%</span></div>'
+      + '      <div class="progress-bar"><div class="progress-fill" style="width:' + percent.toFixed(1) + '%;"></div></div>'
       + '    </div>'
       + '  </div>'
       + '  <div class="card-actions">'
@@ -175,13 +247,18 @@
     container.style.display = 'grid';
 
     if (!rows.length) {
-      container.innerHTML = '<div style="padding:24px;color:#666;background:#fff;border-radius:12px;">\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e17\u0e35\u0e48\u0e15\u0e23\u0e07\u0e01\u0e31\u0e1a\u0e15\u0e31\u0e27\u0e01\u0e23\u0e2d\u0e07</div>';
+      container.innerHTML = renderInlineState('\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e17\u0e35\u0e48\u0e15\u0e23\u0e07\u0e01\u0e31\u0e1a\u0e15\u0e31\u0e27\u0e01\u0e23\u0e2d\u0e07');
       renderFilterSummary([]);
       return;
     }
 
     container.innerHTML = rows.map(createBudgetCard).join('');
     renderFilterSummary(rows);
+    Array.prototype.forEach.call(container.querySelectorAll('.progress-fill'), function(node, index) {
+      try {
+        node.style.background = progressColor(usagePercent(rows[index] || {}));
+      } catch (e) {}
+    });
   }
 
   function ensureExpenseHiddenItemId() {
@@ -225,6 +302,7 @@
       return false;
     }
 
+    item = normalizeBudgetViewItem(item);
     State.selectedItem = item;
     ensureExpenseHiddenItemId().value = item.itemId || '';
     var isSupport = isSupportItem(item);
@@ -232,10 +310,8 @@
     if (modalDetails) {
       var details = '<strong>' + escapeHtmlSafe(item.item || item.itemId) + '</strong><br>\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d ' + fmtCurrency(item.remaining) + ' \u0e1a\u0e32\u0e17';
       if (isSupport) {
-        var allocatedQty = Number(item.allocatedQuantity != null ? item.allocatedQuantity : (item.allocatedQty != null ? item.allocatedQty : 0)) || 0;
-        var usedQty = Number(item.usedQuantity != null ? item.usedQuantity : (item.quantityUsed != null ? item.quantityUsed : (item.usedQty != null ? item.usedQty : 0))) || 0;
-        var remainingQty = Number((allocatedQty - usedQty).toFixed(4));
-        details += '<br>\u0e08\u0e33\u0e19\u0e27\u0e19\u0e08\u0e31\u0e14\u0e2a\u0e23\u0e23 ' + escapeHtmlSafe(allocatedQty) + ' | \u0e40\u0e1a\u0e34\u0e01\u0e41\u0e25\u0e49\u0e27 ' + escapeHtmlSafe(usedQty) + ' | \u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d ' + escapeHtmlSafe(remainingQty);
+        var qtyMeta = getBudgetQuantityMeta(item);
+        details += '<br>\u0e08\u0e33\u0e19\u0e27\u0e19\u0e08\u0e31\u0e14\u0e2a\u0e23\u0e23 ' + escapeHtmlSafe(qtyMeta.allocatedQty) + ' | \u0e40\u0e1a\u0e34\u0e01\u0e41\u0e25\u0e49\u0e27 ' + escapeHtmlSafe(qtyMeta.usedQty) + ' | \u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d ' + escapeHtmlSafe(qtyMeta.remainingQty);
       }
       modalDetails.innerHTML = details;
     }
@@ -272,7 +348,7 @@
 
     var rows = Array.isArray(history) ? history : [];
     if (!rows.length) {
-      container.innerHTML = '<div style="padding:12px;color:#666;">\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</div>';
+      container.innerHTML = renderInlineState('\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23');
       return;
     }
 
@@ -282,17 +358,17 @@
       var canEdit = owner && currentUserEmail && owner === currentUserEmail;
       var statusColor = entry.status === 'CANCELLED' ? '#b00020' : (entry.status === 'EDITED' ? '#ef6c00' : '#2e7d32');
       return ''
-        + '<div class="history-item" style="padding:12px;border:1px solid #eee;border-radius:10px;margin-bottom:10px;background:#fff;">'
-        + '  <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'
+        + '<div class="history-item">'
+        + '  <div class="history-item__top">'
         + '    <div>'
-        + '      <div style="font-weight:700;">' + fmtCurrency(entry.amount) + ' \u0e1a\u0e32\u0e17</div>'
-        + '      <div style="color:#666;font-size:13px;">' + escapeHtmlSafe(entry.expenseDate || entry.timestamp || '-') + ' | ' + escapeHtmlSafe(entry.user || '-') + '</div>'
+        + '      <div class="history-item__amount">' + fmtCurrency(entry.amount) + ' \u0e1a\u0e32\u0e17</div>'
+        + '      <div class="history-item__meta">' + escapeHtmlSafe(entry.expenseDate || entry.timestamp || '-') + ' | ' + escapeHtmlSafe(entry.user || '-') + '</div>'
         + '    </div>'
-        + '    <div style="font-size:12px;font-weight:700;color:' + statusColor + ';">' + escapeHtmlSafe(entry.status || 'ACTIVE') + '</div>'
+        + '    <div class="history-item__status" style="color:' + statusColor + ';">' + escapeHtmlSafe(entry.status || 'ACTIVE') + '</div>'
         + '  </div>'
-        + '  <div style="margin-top:8px;color:#444;">' + escapeHtmlSafe(entry.description || '-') + '</div>'
-        + '  <div style="margin-top:8px;font-size:12px;color:#666;">\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d\u0e2b\u0e25\u0e31\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23: ' + fmtCurrency(entry.newRemaining) + '</div>'
-        + '  <div style="display:flex;gap:8px;margin-top:10px;">'
+        + '  <div class="history-item__description">' + escapeHtmlSafe(entry.description || '-') + '</div>'
+        + '  <div class="history-item__remaining">\u0e04\u0e07\u0e40\u0e2b\u0e25\u0e37\u0e2d\u0e2b\u0e25\u0e31\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23: ' + fmtCurrency(entry.newRemaining) + '</div>'
+        + '  <div class="history-item__actions">'
         + (canEdit && entry.status !== 'CANCELLED'
             ? '<button type="button" class="btn btn-secondary" data-role="edit-expense" data-log-row="' + escapeHtmlSafe(entry.logRowIndex) + '">\u0e41\u0e01\u0e49\u0e44\u0e02</button>'
               + '<button type="button" class="btn btn-secondary" data-role="cancel-expense" data-log-row="' + escapeHtmlSafe(entry.logRowIndex) + '">\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01</button>'
@@ -325,7 +401,7 @@
     };
     var onFailure = function(err) {
       if (loading) loading.style.display = 'none';
-      if (container) container.innerHTML = '<div style="padding:12px;color:#b00020;">' + escapeHtmlSafe(err && err.message ? err.message : String(err || '\u0e42\u0e2b\u0e25\u0e14\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08')) + '</div>';
+      if (container) container.innerHTML = renderInlineState(err && err.message ? err.message : String(err || '\u0e42\u0e2b\u0e25\u0e14\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08'), 'error');
     };
 
     try {
@@ -663,6 +739,8 @@
 
   window.setBudgetLoading = window.setBudgetLoading || setLoading;
   window.setBudgetError = window.setBudgetError || setError;
+  window.normalizeBudgetViewItem = window.normalizeBudgetViewItem || normalizeBudgetViewItem;
+  window.getBudgetQuantityMeta = window.getBudgetQuantityMeta || getBudgetQuantityMeta;
   window.createBudgetCard = window.createBudgetCard || createBudgetCard;
   window.renderCards = window.renderCards || renderCards;
   window.displayData = window.displayData || function(payload) {
@@ -678,7 +756,7 @@
     }
 
     State.user = payload.user || State.user || null;
-    State.allItems = Array.isArray(payload.items) ? payload.items.slice() : [];
+    State.allItems = Array.isArray(payload.items) ? payload.items.map(normalizeBudgetViewItem) : [];
     State.filteredItems = State.allItems.slice();
     State.budgetAlerts = Array.isArray(payload.alerts) ? payload.alerts.slice() : (State.budgetAlerts || []);
 
