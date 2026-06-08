@@ -5,24 +5,50 @@ Google Apps Script web app for budget management and support-budget reporting.
 
 ## Project Layout
 
-- `code.gs`
-  Main backend for the primary budget app.
-- `support_module.gs`
-  Support-budget backend logic.
-- `support_report.gs`
-  Support report generation and PDF export helpers.
-- `support_agg_reader.gs`
-  Support aggregate reader.
-- `Index.html`
-  Main web app entry page.
-- `SupportIndex.html`
-  Support page entry.
-- `Styles.html`
-  Shared styles.
-- `JavaScript_*.html`
-  Frontend modules and UI helpers.
-- `appsscript.json`
-  Apps Script manifest.
+### Backend (Google Apps Script `.gs` files)
+
+- `app_config.gs` — Configuration constants
+- `app_sheet_utils.gs` — Spreadsheet helpers, header resolution, shared utilities
+- `app_errors.gs` — Error logging and wrapper
+- `app_auth.gs` — User/auth/access helpers
+- `app_web.gs` — `doGet()` and `include()`
+- `budget_service.gs` — Budget list, dashboard, alerts, transfers
+- `transaction_service.gs` — Expense CRUD, history, edit, cancel, transaction log
+- `admin_service.gs` — Email alerts, PDF export
+- `support_module.gs` — Support-budget backend logic
+- `support_report.gs` — Support report generation and PDF export helpers
+- `support_agg_reader.gs` — Support aggregate reader
+- `code.gs` — Minimal stub (functions moved to service files)
+
+### Frontend (HTML includes)
+
+- `Index.html` — Main web app entry page
+- `SupportIndex.html` — Support page entry
+- `Styles.html` — Shared styles (2026 UI refresh)
+- `client_rpc_adapter.html` — Canonical RPC layer (`rpcWithRetry`)
+- `JavaScript_core.html` — Data loading, filter application, page bootstrap
+- `JavaScript_ui.html` — Card rendering, history view, dashboard view
+- `JavaScript_modal_manager.html` — Modal lifecycle and backdrop management
+- `JavaScript_actions.html` — Event delegation for main page buttons
+- `JavaScript_helpers.html` — Shared utilities (`escapeHtml`, etc.)
+- `JavaScript_alerts_manager.html` — Alert modal and badge management
+- `JavaScript_export_enhancements.html` — Export bindings (PDF, dashboard)
+- `JavaScript_workdetail_modal.html` — Work-detail modal open/create
+- `JavaScript_workdetail_ui.html` — Work-detail table rendering
+- `JavaScript_card_export_visibility.html` — Hide stray export buttons in cards
+- `JavaScript_fallback_shims.html` — Compatibility shims and bootstrap safety net
+- `ExpenseEdit.html` — Edit/cancel expense modals
+- `ViewToggle.html` — Card/tile view toggle and sorting
+- `support_client.html` — Support page client logic
+- `showSupportView.html` — Support view rendering
+- `support_inline_quantity.html` — Inline quantity editing for support
+- `support_export.html` — Support export helpers
+- `TransferBudgetModal.html` — Budget transfer modal
+
+### Config
+
+- `appsscript.json` — Apps Script manifest
+- `REFACTOR_PLAN.md` — Phased refactor roadmap
 
 ## Local Naming Rules
 
@@ -222,87 +248,40 @@ These areas deserve extra attention during refactor and verification:
   - Dashboard/support export paths rely on dedicated templates, print-specific CSS, and extra JS coordination
 - Shared frontend state
   - Several modules write directly to `window.State` and other global flags
-- CSS override layers
-  - `Styles.html` contains multiple override sections and heavy `!important` usage
 
-## Day 1 Refactor Baseline
+## Refactor Complete
 
-Day 1 of the refactor plan is documentation-only. No runtime logic should change in this step.
+The refactor is complete. See `REFACTOR_PLAN.md` for the full roadmap.
 
-Definition of done:
+### What Changed
 
-- [ ] `README.md` contains a usable manual regression checklist
-- [ ] `README.md` identifies fragile areas worth watching during refactor
-- [ ] `REFACTOR_PLAN.md` stays aligned with the current repository structure
-- [ ] No server-side or frontend behavior is intentionally changed in this step
+- Backend split into 7 service files by responsibility
+- Shared helpers in `app_sheet_utils.gs` reduce duplication
+- Frontend RPC centralized through `rpcWithRetry`
+- Dead code and duplicate CSS removed
+- Thai text encoding repaired
 
-## Before Refactor
+### What's Left
 
-Run through this short checklist before starting any refactor commit:
-
-- [ ] Check the current working tree and note any unrelated in-progress changes
-- [ ] Confirm which files are intentionally in scope for the next commit
-- [ ] Confirm `doGet()` still routes to the expected templates:
-  - [ ] main page -> `Index.html`
-  - [ ] support page -> `SupportIndex.html`
-- [ ] Choose at least one write flow to use as a smoke test after the change:
-  - [ ] main expense save
-  - [ ] support expense save
-  - [ ] transfer budget
-- [ ] Re-read the relevant section of `REFACTOR_PLAN.md` before moving files or changing responsibilities
-- [ ] Confirm whether the next change is documentation-only, structure-only, or behavior-changing
-
-## After Each Refactor Commit
-
-Run a minimal smoke test after every refactor-oriented commit, even if the change looks internal:
-
-- [ ] Open the main page
-- [ ] Open the support page
-- [ ] Run one expense save flow
-- [ ] Open one history modal
-- [ ] Confirm there are no obvious duplicate event handlers, blank sections, or broken modals
-- [ ] If the commit touched dashboard/export code, also run:
-  - [ ] dashboard open
-  - [ ] dashboard export
-
-## Out Of Scope For Commit 1
-
-Commit 1 is for documentation and alignment only. It should not include these changes:
-
-- [ ] No `.gs` backend file split yet
-- [ ] No frontend architecture rewrite
-- [ ] No removal of shims, stubs, or fallback layers
-- [ ] No CSS cleanup or large visual changes
-- [ ] No renaming of server functions used by `google.script.run`
-- [ ] No intentional runtime behavior changes
-
-## Day 2 Working Agreement
-
-Day 2 turns the refactor notes into a repeatable team workflow.
-
-Definition of done:
-
-- [ ] `README.md` includes a clear pre-refactor checklist
-- [ ] `README.md` includes a clear post-commit smoke-test checklist
-- [ ] `README.md` states that Commit 1 remains documentation-only
-- [ ] The repo now has a shared working agreement for the next refactor commits
+- Manual regression testing (use the checklist above)
+- Consider further CSS `!important` reduction
+- Consider removing the safe event interception block in `Index.html`
 
 ## Refactor Status
 
 Completed:
 
-- Renamed source files from `.txt` to `.gs` / `.html`
-- Rebuilt `Index.html`
-- Extracted core/UI/modal responsibilities
-- Moved expense save flow into `JavaScript_core.html`
-- Removed `record-expense-hotfix.html`
-- Reduced work-detail code from patch-heavy scripts into narrower modules
-- Removed empty include modules that no longer contributed runtime behavior
-- Added `appsscript.json`
-- Added `clasp` helper files
+- Phase 0: Documentation, regression checklist, REFACTOR_PLAN.md
+- Phase 1: Backend file split — `code.gs` split into 7 service files
+- Phase 2: Shared backend helpers — unified utilities in `app_sheet_utils.gs`
+- Phase 3: Frontend RPC centralization — `rpcWithRetry` as single RPC path, escape dedup
+- Phase 4: Dead code removal — IE meta, debug utilities, unused variables, redundant retries
+- Phase 5: CSS cleanup — removed 111 lines of duplicate definitions
+- Phase 6: Thai text repair — fixed 2 corrupted strings in `JavaScript_ui.html`
 
 Still worth improving:
 
 - Consider merging work-detail modules into a single first-class feature module
-- Add browser-level verification after the recent frontend refactor
+- Phase 7 candidate: further CSS `!important` reduction (low priority)
+- Consider removing the safe event interception block in `Index.html` (currently kept as safety net)
 
