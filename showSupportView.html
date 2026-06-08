@@ -191,10 +191,32 @@
     // Build support DOM if not already done
     buildSupportDom();
 
-    // Use shell navigation to switch to support section
-    if (typeof window.switchSection === 'function') {
-      window.switchSection('support');
-    }
+    // Show support section, hide all others
+    document.querySelectorAll('.app-section').forEach(function(sec) {
+      if (sec.id === 'section-support') {
+        sec.removeAttribute('hidden');
+        sec.classList.add('active');
+      } else {
+        sec.setAttribute('hidden', '');
+        sec.classList.remove('active');
+      }
+    });
+
+    // Update sidebar active state
+    var navItems = document.querySelectorAll('.sidebar-nav-item');
+    navItems.forEach(function(item) {
+      var isActive = item.getAttribute('data-section') === 'support';
+      item.classList.toggle('active', isActive);
+      if (isActive) item.setAttribute('aria-current','page');
+      else item.removeAttribute('aria-current');
+    });
+
+    // Update title
+    var title = document.getElementById('pageTitle');
+    if (title) title.textContent = 'เงินอุดหนุน';
+
+    window.State = window.State || {};
+    window.State.activeSection = 'support';
 
     // Initialize support client
     initSupportClientWithRetry(25, 120);
