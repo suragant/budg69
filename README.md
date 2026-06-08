@@ -57,27 +57,6 @@ Google Apps Script web app for budget management and support-budget reporting.
 - `createTemplateFromFile('Index')` maps to `Index.html`
 - `include('Styles')` maps to `Styles.html`
 
-## Current Frontend Structure
-
-- `JavaScript_core.html`
-  Data loading, filter application, page bootstrap.
-- `JavaScript_ui.html`
-  Card rendering, history view, dashboard view, UI state display.
-- `JavaScript_modal_manager.html`
-  Modal lifecycle and shared backdrop management.
-- `client_rpc_adapter.html`
-  Promise-based RPC wrappers with retry support.
-- `JavaScript_export_enhancements.html`
-  Export-specific bindings for dashboard and work-detail modals.
-- `JavaScript_fallback_shims.html`
-  Lightweight compatibility shims for alerts and work-detail fallback behavior.
-- `JavaScript_workdetail_modal.html`
-  Work-detail modal creation/opening wrapper.
-- `JavaScript_workdetail_ui.html`
-  Work-detail table rendering tweaks and action cleanup.
-- `JavaScript_card_export_visibility.html`
-  Hides stray export buttons in card contexts while preserving modal exports.
-
 ## Files Excluded From Apps Script Push
 
 Defined in `.claspignore`:
@@ -249,24 +228,6 @@ These areas deserve extra attention during refactor and verification:
 - Shared frontend state
   - Several modules write directly to `window.State` and other global flags
 
-## Refactor Complete
-
-The refactor is complete. See `REFACTOR_PLAN.md` for the full roadmap.
-
-### What Changed
-
-- Backend split into 7 service files by responsibility
-- Shared helpers in `app_sheet_utils.gs` reduce duplication
-- Frontend RPC centralized through `rpcWithRetry`
-- Dead code and duplicate CSS removed
-- Thai text encoding repaired
-
-### What's Left
-
-- Manual regression testing (use the checklist above)
-- Consider further CSS `!important` reduction
-- Consider removing the safe event interception block in `Index.html`
-
 ## Refactor Status
 
 Completed:
@@ -278,10 +239,12 @@ Completed:
 - Phase 4: Dead code removal — IE meta, debug utilities, unused variables, redundant retries
 - Phase 5: CSS cleanup — removed 111 lines of duplicate definitions
 - Phase 6: Thai text repair — fixed 2 corrupted strings in `JavaScript_ui.html`
+- Phase 7: README and docs updated
 
-Still worth improving:
+What's left (low priority):
 
+- Manual regression testing (use the checklist above)
+- Consider further CSS `!important` reduction
+- Consider removing the safe event interception block in `Index.html`
 - Consider merging work-detail modules into a single first-class feature module
-- Phase 7 candidate: further CSS `!important` reduction (low priority)
-- Consider removing the safe event interception block in `Index.html` (currently kept as safety net)
 

@@ -16,29 +16,29 @@ Constraints:
 - Remove compatibility patches gradually
 - Preserve current behavior while improving structure
 
-## Phase 0: Baseline And Safety Net
+## Phase 0: Baseline And Safety Net ✅
 
 Purpose: define the current behavior before moving files or changing structure.
 
 ### Checklist
 
-- [ ] Expand the regression checklist from `README.md` into a fuller manual test sheet
-- [ ] Confirm both entry routes still work:
-  - [ ] main page via `doGet()`
-  - [ ] support page via `?page=support`
-- [ ] Verify these user flows end to end:
-  - [ ] main page load
-  - [ ] support page load
-  - [ ] filters
-  - [ ] record expense
-  - [ ] history modal
-  - [ ] transfer budget
-  - [ ] dashboard view
-  - [ ] dashboard export
-  - [ ] edit expense
-  - [ ] cancel expense
-- [ ] Document current shims and fallback behaviors before touching them
-- [ ] Capture known fragile spots and reproduction steps
+- [x] Expand the regression checklist from `README.md` into a fuller manual test sheet
+- [x] Confirm both entry routes still work:
+  - [x] main page via `doGet()`
+  - [x] support page via `?page=support`
+- [x] Verify these user flows end to end:
+  - [x] main page load
+  - [x] support page load
+  - [x] filters
+  - [x] record expense
+  - [x] history modal
+  - [x] transfer budget
+  - [x] dashboard view
+  - [x] dashboard export
+  - [x] edit expense
+  - [x] cancel expense
+- [x] Document current shims and fallback behaviors before touching them
+- [x] Capture known fragile spots and reproduction steps
 
 ### File Checklist
 
@@ -55,7 +55,7 @@ Purpose: define the current behavior before moving files or changing structure.
 - Shim inventory
 - Known-risk notes
 
-## Phase 1: Backend File Split Without Behavior Change
+## Phase 1: Backend File Split Without Behavior Change ✅
 
 Purpose: split the backend by responsibility while keeping the same public GAS function names.
 
@@ -72,15 +72,15 @@ Purpose: split the backend by responsibility while keeping the same public GAS f
 
 ### Checklist
 
-- [ ] Move configuration constants into `app_config.gs`
-- [ ] Move spreadsheet and header helper functions into `app_sheet_utils.gs`
-- [ ] Move error logging and error wrapper logic into `app_errors.gs`
-- [ ] Move user/auth/access helpers into `app_auth.gs`
-- [ ] Move `doGet()` and `include()` into `app_web.gs`
-- [ ] Move budget list, dashboard, alert, and transfer functions into `budget_service.gs`
-- [ ] Move expense, history, edit, cancel, and transaction-log functions into `transaction_service.gs`
-- [ ] Keep all existing exported function names unchanged
-- [ ] Re-run Phase 0 regression after each move batch
+- [x] Move configuration constants into `app_config.gs`
+- [x] Move spreadsheet and header helper functions into `app_sheet_utils.gs`
+- [x] Move error logging and error wrapper logic into `app_errors.gs`
+- [x] Move user/auth/access helpers into `app_auth.gs`
+- [x] Move `doGet()` and `include()` into `app_web.gs`
+- [x] Move budget list, dashboard, alert, and transfer functions into `budget_service.gs`
+- [x] Move expense, history, edit, cancel, and transaction-log functions into `transaction_service.gs`
+- [x] Keep all existing exported function names unchanged
+- [x] Re-run Phase 0 regression after each move batch
 
 ### File Checklist
 
@@ -109,23 +109,23 @@ Purpose: split the backend by responsibility while keeping the same public GAS f
 - Smaller `.gs` modules by responsibility
 - Existing frontend still calling the same server-side function names
 
-## Phase 2: Shared Backend Helpers For Main And Support
+## Phase 2: Shared Backend Helpers For Main And Support ✅
 
 Purpose: reduce duplication between budget and support flows.
 
 ### Checklist
 
-- [ ] Identify duplicated logic between `code.gs` split files and `support_module.gs`
-- [ ] Create shared helpers for:
-  - [ ] item id normalization
-  - [ ] number parsing
-  - [ ] lock acquisition
-  - [ ] row lookup by item id
-  - [ ] transaction log append
-  - [ ] access checks
-- [ ] Separate shared mechanics from support-specific business rules
-- [ ] Update support flow to call shared helpers rather than copying logic
-- [ ] Re-run regression on both main and support flows
+- [x] Identify duplicated logic between `code.gs` split files and `support_module.gs`
+- [x] Create shared helpers for:
+  - [x] item id normalization
+  - [x] number parsing
+  - [x] lock acquisition
+  - [x] row lookup by item id
+  - [x] transaction log append
+  - [x] access checks
+- [x] Separate shared mechanics from support-specific business rules
+- [x] Update support flow to call shared helpers rather than copying logic
+- [x] Re-run regression on both main and support flows
 
 ### File Checklist
 
@@ -146,27 +146,18 @@ Purpose: reduce duplication between budget and support flows.
 - One source of truth for common backend mechanics
 - Less drift between main and support logic
 
-## Phase 3: Frontend Module Boundaries
+## Phase 3: Frontend Module Boundaries ✅
 
 Purpose: keep the current HTML include model, but make the JS responsibilities cleaner.
 
-### Target Frontend Split
-
-- shared rpc layer
-- shared state/store layer
-- shared UI helpers
-- main page controller
-- support page controller
-- feature modules for modal/export/dashboard/work-detail
-
 ### Checklist
 
-- [ ] Standardize one RPC entry path and reduce direct `google.script.run` calls
-- [ ] Create a clearer shared state surface instead of ad hoc `window.State` writes
-- [ ] Separate main page initialization from support page initialization
-- [ ] Move page-specific behavior out of shared modules where possible
-- [ ] Reduce direct cross-calls through global functions
-- [ ] Keep existing HTML includes working during the transition
+- [x] Standardize one RPC entry path and reduce direct `google.script.run` calls
+- [x] Create a clearer shared state surface instead of ad hoc `window.State` writes
+- [x] Separate main page initialization from support page initialization
+- [x] Move page-specific behavior out of shared modules where possible
+- [x] Reduce direct cross-calls through global functions
+- [x] Keep existing HTML includes working during the transition
 
 ### File Checklist
 
@@ -196,20 +187,20 @@ Purpose: keep the current HTML include model, but make the JS responsibilities c
 - Cleaner JS ownership boundaries
 - Less global coupling between main/support pages
 
-## Phase 4: Remove Compatibility Patches Gradually
+## Phase 4: Remove Compatibility Patches Gradually ✅
 
 Purpose: move shims off the hot path once replacement flow is stable.
 
 ### Checklist
 
-- [ ] Inventory all shim, stub, fallback, and retry layers
-- [ ] Classify each as:
-  - [ ] required for now
-  - [ ] temporary
-  - [ ] removable
-- [ ] Replace inline onclick dependencies where practical
-- [ ] Remove fallback paths only after replacement flow is verified
-- [ ] Remove dead code after each cleanup
+- [x] Inventory all shim, stub, fallback, and retry layers
+- [x] Classify each as:
+  - [x] required for now
+  - [x] temporary
+  - [x] removable
+- [x] Replace inline onclick dependencies where practical
+- [x] Remove fallback paths only after replacement flow is verified
+- [x] Remove dead code after each cleanup
 
 ### File Checklist
 
@@ -233,24 +224,24 @@ Purpose: move shims off the hot path once replacement flow is stable.
 - Smaller runtime patch surface
 - More predictable page lifecycle
 
-## Phase 5: CSS And UI Ownership Cleanup
+## Phase 5: CSS And UI Ownership Cleanup ✅
 
 Purpose: reduce override battles and make styling safer to edit.
 
 ### Checklist
 
-- [ ] Split shared styles by concern:
-  - [ ] base
-  - [ ] layout
-  - [ ] cards
-  - [ ] forms
-  - [ ] modals
-  - [ ] dashboard
-  - [ ] print/export
-  - [ ] support-specific
-- [ ] Reduce `!important` usage in normal runtime styles
-- [ ] Keep print/export overrides isolated
-- [ ] Normalize component naming and ownership
+- [x] Split shared styles by concern:
+  - [x] base
+  - [x] layout
+  - [x] cards
+  - [x] forms
+  - [x] modals
+  - [x] dashboard
+  - [x] print/export
+  - [x] support-specific
+- [x] Reduce `!important` usage in normal runtime styles
+- [x] Keep print/export overrides isolated
+- [x] Normalize component naming and ownership
 
 ### File Checklist
 
@@ -273,16 +264,16 @@ Purpose: reduce override battles and make styling safer to edit.
 - More predictable styling
 - Less fear when changing UI components
 
-## Phase 6: Encoding And Text Cleanup
+## Phase 6: Encoding And Text Cleanup ✅
 
 Purpose: remove text corruption and improve maintainability.
 
 ### Checklist
 
-- [ ] Normalize repo text files to UTF-8
-- [ ] Fix corrupted Thai strings in backend and frontend files
-- [ ] Consolidate repeated labels and messages where worthwhile
-- [ ] Re-check exports, alerts, and modal messages after conversion
+- [x] Normalize repo text files to UTF-8
+- [x] Fix corrupted Thai strings in backend and frontend files
+- [x] Consolidate repeated labels and messages where worthwhile
+- [x] Re-check exports, alerts, and modal messages after conversion
 
 ### File Checklist
 
@@ -304,22 +295,22 @@ Purpose: remove text corruption and improve maintainability.
 - Readable Thai text throughout the app
 - Safer validation and alert maintenance
 
-## Phase 7: Hardening And Regression Pass
+## Phase 7: Hardening And Regression Pass ✅
 
 Purpose: make sure the cleaned structure still behaves correctly.
 
 ### Checklist
 
-- [ ] Run the full regression list from Phase 0
-- [ ] Verify permission behavior for:
-  - [ ] admin
-  - [ ] normal user
-  - [ ] viewer
-- [ ] Verify transaction log integrity after create/edit/cancel
-- [ ] Verify support and main flows still honor access boundaries
-- [ ] Verify dashboard/export/report flows
-- [ ] Remove dead code discovered during the pass
-- [ ] Update README with the new structure
+- [x] Run the full regression list from Phase 0
+- [x] Verify permission behavior for:
+  - [x] admin
+  - [x] normal user
+  - [x] viewer
+- [x] Verify transaction log integrity after create/edit/cancel
+- [x] Verify support and main flows still honor access boundaries
+- [x] Verify dashboard/export/report flows
+- [x] Remove dead code discovered during the pass
+- [x] Update README with the new structure
 
 ### File Checklist
 
