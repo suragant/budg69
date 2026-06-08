@@ -5,6 +5,7 @@
   window.State = window.State || {};
 
   var _backup = null;
+  var _mainStateSnapshot = null;
   var _removedBudgetContainer = null;
   var _removedBudgetContainer_nextSibling = null;
   var _createdSupportIds = ['supportPanelWrapper', 'supportBudgetContainer'];
@@ -258,7 +259,6 @@
                 alert('เกิดข้อผิดพลาดขณะสร้าง PDF (ดู console)');
               });
               return;
-              }
 
               console.warn('No export mechanism available');
             } catch (err) {
@@ -285,9 +285,21 @@
     }, intervalMs);
   }
 
-  function showSupportView(){
+  function showSupportView(options){
+    options = options || {};
+
     // backup layout once
     try { backupCurrentLayout(); } catch(e){}
+
+    // Snapshot main state before support overwrites it
+    try {
+      _mainStateSnapshot = {
+        allItems: Array.isArray(window.State.allItems) ? window.State.allItems.slice() : [],
+        filteredItems: Array.isArray(window.State.filteredItems) ? window.State.filteredItems.slice() : []
+      };
+      console.log('showSupportView: snapshot main state (%d items)', _mainStateSnapshot.allItems.length);
+    } catch(e) { console.warn('showSupportView: snapshot failed', e); }
+
     window._supportMode = true;
     var main = document.querySelector('.container') || document.body;
 
@@ -313,7 +325,11 @@
     buildSupportDom();
     Array.from(document.querySelectorAll('#supportPanelWrapper, #supportBudgetContainer')).forEach(function(el){ el.style.display = ''; el.style.pointerEvents = 'auto'; });
     tryInitSupportClientWithRetry(25, 120);
-    try{ history.pushState({page:'support'}, 'Support', window.location.pathname + '?page=support'); }catch(e){}
+
+    // Only push history entry on explicit user navigation (not popstate or initial load)
+    if (!options.skipPushState) {
+      try{ history.pushState({page:'support'}, 'Support', window.location.pathname + '?page=support'); }catch(e){}
+    }
     console.log('showSupportView done; supportMode=', !!window._supportMode);
   }
 
@@ -325,8 +341,34 @@
         main.removeAttribute('data-support-active');
       }
     }catch(e){}
+
+    // restore main state before layout restore
+    try {
+      if (_mainStateSnapshot) {
+        window.State.allItems = _mainStateSnapshot.allItems;
+        window.State.filteredItems = _mainStateSnapshot.filteredItems;
+        console.log('closeSupportView: restored main state (%d items)', _mainStateSnapshot.allItems.length);
+        _mainStateSnapshot = null;
+      } else {
+        // fallback: reload main data from server
+        console.warn('closeSupportView: no snapshot available, reloading main data');
+        if (typeof window.loadData === 'function') {
+          window.loadData();
+        }
+      }
+    } catch(e) { console.warn('closeSupportView: state restore failed', e); }
+
     // restore layout and cleanup
     try { restoreLayout(); } catch(e){}
+
+    // Re-render main cards from restored state
+    try {
+      var container = document.getElementById('budgetContainer');
+      if (container && typeof window.renderCards === 'function' && Array.isArray(window.State.filteredItems)) {
+        window.renderCards(window.State.filteredItems);
+      }
+    } catch(e) { console.warn('closeSupportView: re-render failed', e); }
+
     console.log('closeSupportView done; supportMode=', !!window._supportMode);
   }
 
@@ -337,7 +379,7 @@
       if (state && state.page === 'support') {
         // when navigating forward/back to the support state, ensure view visible
         if (!window._supportMode) {
-          showSupportView();
+          showSupportView({skipPushState: true});
         }
       } else {
         // When leaving support state, ensure view closed
@@ -351,11 +393,11 @@
   window.showSupportView = showSupportView;
   window.closeSupportView = closeSupportView;
 
-  // If URL already has page=support on load, open it
+  // If URL already has page=support on load, open it without pushing history
   try{
     var qp = new URLSearchParams(location.search);
     if(qp.get('page') === 'support'){
-      setTimeout(function(){ showSupportView(); tryInitSupportClientWithRetry(25,120); }, 200);
+      setTimeout(function(){ showSupportView({skipPushState: true}); tryInitSupportClientWithRetry(25,120); }, 200);
     }
   }catch(e){}
 })();
