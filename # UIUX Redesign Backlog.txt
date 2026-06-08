@@ -1,0 +1,191 @@
+# UI/UX Redesign Backlog
+
+## Summary
+
+Backlog นี้แตกจากแผนรีดีไซน์ `budg69` ให้พร้อมเอาไปทำต่อเป็นรอบงานได้เลย โดยยึด 3 decisions ที่ล็อกไว้แล้ว:
+
+- ใช้ `Unified Shell`
+- ให้ `Support Budget` เป็น section ใน shell เดียวกัน
+- ใช้ `Dense List/Table` เป็น working view หลัก
+
+## Backlog
+
+### Epic 1: Unified App Shell
+- [ ] ออกแบบ app shell กลางสำหรับ `Index.html`
+- [ ] กำหนด layout หลัก: sidebar, top command bar, content pane
+- [ ] นิยาม section title และ active state ของแต่ละ section
+- [ ] รองรับ desktop collapsible sidebar
+- [ ] รองรับ mobile off-canvas sidebar
+- [ ] ย้าย action หลักใน header ให้เหลือเฉพาะที่ควรอยู่ระดับ global
+- [ ] กำหนด state model สำหรับ section navigation โดยไม่เปลี่ยน backend contract
+
+**Acceptance**
+- [ ] โหลดหน้าแล้วเห็น shell เดียวที่ใช้ได้ทั้งระบบ
+- [ ] เปลี่ยน section ได้โดยไม่ต้องซ่อน/ย้าย DOM แบบ ad hoc
+- [ ] mobile ใช้งาน nav ได้จริง
+
+---
+
+### Epic 2: Information Architecture
+- [ ] จัดโครงเมนูหลักตาม ERP/internal-tool pattern
+- [ ] สร้าง section เหล่านี้ใน UX:
+  - [ ] Dashboard
+  - [ ] Budget Items
+  - [ ] Transfers
+  - [ ] Expenses / History
+  - [ ] Support Budget
+  - [ ] Reports
+  - [ ] Admin
+- [ ] กำหนดว่าอะไรเป็น page-level section และอะไรคงเป็น modal
+- [ ] ล็อกกติกาการแสดงผลตาม role
+
+**Acceptance**
+- [ ] ทุก flow สำคัญเข้าถึงได้จาก navigation ที่ชัดเจน
+- [ ] ไม่มี flow สำคัญที่ต้องพึ่ง hidden button หรือ special mode
+
+---
+
+### Epic 3: Budget Items Working Surface
+- [ ] เปลี่ยน default view จาก card-first เป็น dense list/table
+- [ ] กำหนด columns หลัก:
+  - [ ] work
+  - [ ] department
+  - [ ] budget type
+  - [ ] item
+  - [ ] budget
+  - [ ] used
+  - [ ] remaining
+  - [ ] status
+  - [ ] actions
+- [ ] คง card view เป็น alternate view
+- [ ] ปรับ `ViewToggle` ให้ list เป็น default
+- [ ] ทำ inline actions ให้เสถียรใน row/list view
+- [ ] ปรับ summary metrics ให้กระชับและอ่านเร็ว
+
+**Acceptance**
+- [ ] ผู้ใช้สแกนรายการงบได้เร็วขึ้นบน desktop
+- [ ] action ต่อ row ใช้งานได้ครบ
+- [ ] สลับ list/card ได้โดย state ไม่พัง
+
+---
+
+### Epic 4: Filter, Search, and Status UX
+- [ ] รวม search, sort, status filter ให้อยู่ใน control system เดียว
+- [ ] ออกแบบ filter panel สำหรับ desktop
+- [ ] ออกแบบ collapsible filter area สำหรับ mobile
+- [ ] ทำ result count / warning state ให้ชัดขึ้น
+- [ ] ทำ empty state / loading state / error state ให้เป็นระบบเดียวกัน
+
+**Acceptance**
+- [ ] filter/search ใช้งานง่ายและไม่แย่งความเด่นจากรายการหลัก
+- [ ] loading/error/empty states หน้าตาและพฤติกรรมสม่ำเสมอ
+
+---
+
+### Epic 5: Support Budget Integration
+- [ ] ย้าย `Support Budget` จาก DOM-swap mode มาเป็น section ปกติใน shell
+- [ ] ลดความรับผิดชอบของ `showSupportView.html`
+- [ ] ให้ `support_client.html` รับผิดชอบเฉพาะ support data/interaction
+- [ ] ใช้ visual system เดียวกับ main section
+- [ ] รักษา flow เดิม:
+  - [ ] load support items
+  - [ ] record support expense
+  - [ ] open history
+  - [ ] export support report
+
+**Acceptance**
+- [ ] support ไม่รู้สึกเป็น “อีกแอปหนึ่ง”
+- [ ] ไม่ต้อง hide sibling nodes เพื่อสลับโหมด
+- [ ] support flow เดิมยังทำงานครบ
+
+---
+
+### Epic 6: Dashboard As Full Section
+- [ ] ย้าย dashboard จาก modal-first ไปเป็น page-level section
+- [ ] ออกแบบ dashboard layout ใหม่ให้เข้ากับ shell
+- [ ] แยก summary, charts, table, export actions ให้ชัด
+- [ ] รักษา chart render และ export behavior เดิม
+- [ ] กำหนด drilldown behavior ที่ยังคงใช้ modal ได้ถ้าจำเป็น
+
+**Acceptance**
+- [ ] dashboard เปิดเป็น section หลัก ไม่ใช่ modal ใหญ่
+- [ ] export และ drilldown ยังใช้งานได้
+
+---
+
+### Epic 7: Transfers, Expenses, and History Flows
+- [ ] ทำให้ Transfers มี entry point ระดับ section/navigation
+- [ ] คง transfer interaction เป็น modal ในรอบแรก
+- [ ] คง expense, edit, cancel, history เป็น modal ในรอบแรก
+- [ ] ทำ modal chrome ให้เป็นภาษาดีไซน์เดียวกัน
+- [ ] ลด duplicate binding / fallback behavior ที่เกิดจาก layout เก่า
+
+**Acceptance**
+- [ ] flows เข้าถึงง่ายขึ้นจาก shell ใหม่
+- [ ] modal หลักทั้งหมดยังทำงานครบ
+- [ ] ไม่มีอาการเปิดซ้ำ/handler ซ้ำชัดเจน
+
+---
+
+### Epic 8: Visual System Consolidation
+- [ ] ใช้ CSS theme ใหม่ใน `Styles.html` เป็นฐานหลัก
+- [ ] ตัดสินใจว่ากฎเก่าไหนต้องคง และกฎไหนต้องย้ายออก
+- [ ] รวมปุ่ม, panel, metric, list, modal, badge, state styles ให้เป็นชุดเดียว
+- [ ] ลดความซ้อนกันของ old gradient/card style กับ work UI refresh style
+- [ ] ปรับ spacing, border, shadow, color hierarchy ให้เหมาะกับ internal tool
+
+**Acceptance**
+- [ ] หน้าหลักและ support ใช้ visual language เดียวกัน
+- [ ] CSS ownership ชัดขึ้นและแก้ง่ายขึ้น
+- [ ] UI ดูเป็น operational tool มากกว่า landing-style app
+
+---
+
+### Epic 9: Compatibility and Route Strategy
+- [ ] กำหนดบทบาทใหม่ของ `SupportIndex.html`
+- [ ] คง compatibility route สำหรับ `?page=support` ในช่วงเปลี่ยนผ่าน
+- [ ] map old entry points ไปยัง section state ใหม่
+- [ ] หลีกเลี่ยงการเปลี่ยน public GAS function names
+- [ ] ระบุจุดที่ยังต้องเก็บ fallback ไว้ชั่วคราว
+
+**Acceptance**
+- [ ] ของเดิมยังเข้าได้ในช่วง migration
+- [ ] ผู้ใช้ไม่เจอ route พังหลังเปลี่ยน shell
+
+---
+
+### Epic 10: QA and Regression Closeout
+- [ ] ทดสอบ shell load
+- [ ] ทดสอบ Budget Items section
+- [ ] ทดสอบ Support Budget section
+- [ ] ทดสอบ Dashboard section
+- [ ] ทดสอบ Transfers flow
+- [ ] ทดสอบ Expense create/edit/cancel
+- [ ] ทดสอบ History modal
+- [ ] ทดสอบ role-based visibility
+- [ ] ทดสอบ mobile navigation/filter behavior
+
+**Acceptance**
+- [ ] main flow ทั้งหมดผ่าน regression
+- [ ] ไม่มี blank state, stuck loader, หรือ obvious layout break
+- [ ] desktop/mobile ใช้งานได้ตาม intended IA ใหม่
+
+## Suggested Delivery Order
+
+1. [x] Epic 1 Unified App Shell
+2. [x] Epic 2 Information Architecture
+3. [x] Epic 3 Budget Items Working Surface
+4. [x] Epic 4 Filter, Search, and Status UX
+5. [x] Epic 5 Support Budget Integration
+6. [x] Epic 6 Dashboard As Full Section
+7. [x] Epic 7 Transfers, Expenses, and History Flows
+8. [x] Epic 8 Visual System Consolidation
+9. [x] Epic 9 Compatibility and Route Strategy
+10. [ ] Epic 10 QA and Regression Closeout
+
+## Assumptions
+
+- ไม่เปลี่ยน GAS backend contract ในรอบนี้
+- ไม่ย้ายไป Node.js
+- รอบแรกเน้น shell + IA + working surface ก่อน
+- modal flows สำคัญยังคงไว้ก่อน แล้วค่อยตัดสินใจแยกรอบถัดไป
