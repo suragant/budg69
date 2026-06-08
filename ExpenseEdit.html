@@ -436,7 +436,6 @@
 
   var _editLogRow = null;
   var _cancelLogRow = null;
-  var _currentUserEmail = '';
 
   function fmtB(n) {
     return Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -490,7 +489,6 @@
   }
 
   window.showHistory = function (history, currentUserEmail) {
-    _currentUserEmail = currentUserEmail || (window.State && window.State.currentUser && window.State.currentUser.email) || '';
 
     var container = $('historyContainer');
     if (!container) return;

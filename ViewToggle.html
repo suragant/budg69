@@ -479,12 +479,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', window._initViewToggle);
   else window._initViewToggle();
 
-  setTimeout(function () {
-    if (typeof window._initViewToggle === 'function') window._initViewToggle();
-  }, 400);
-  setTimeout(function () {
-    if (typeof window._initViewToggle === 'function') window._initViewToggle();
-  }, 1200);
-
 })();
 </script>

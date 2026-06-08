@@ -28,15 +28,6 @@
     }catch(e){ console.warn('hideOtherModalsKeep error', e); }
   }
 
-  function debugModalCount(){
-    try{
-      var modals = Array.from(document.querySelectorAll('.modal'));
-      var visible = modals.filter(function(m){ return m.classList.contains('active') || (m.style.display && m.style.display !== 'none'); });
-      var backdrops = Array.from(document.querySelectorAll('.modal-backdrop, .dialog-backdrop, .backdrop, .overlay'));
-      console.log('MODAL COUNT total=', modals.length, 'visible=', visible.length, 'backdrops=', backdrops.length);
-    }catch(e){}
-  }
-
   // Helper: choose appropriate container id (try support-specific ids then fallback to main only when support mode active)
   function _resolveSupportContainerId() {
     try {
@@ -378,7 +369,6 @@
 
   try{ if (typeof loadSupportItemsList === 'function') window.loadSupportItemsList = loadSupportItemsList; }catch(e){}
   try{ if (typeof bindSupportExpenseButtons === 'function') window.bindSupportExpenseButtons = bindSupportExpenseButtons; }catch(e){}
-  try{ if (typeof debugModalCount === 'function') window.debugModalCount = debugModalCount; }catch(e){}
 
   try {
     window.normalizeSupportViewItem = window.normalizeSupportViewItem || function(it) {
