@@ -456,9 +456,9 @@
         <div style="padding:24px;color:var(--app-muted);">โอนงบประมาณ — เปิดจากเมนูหรือปุ่มโอนงบ</div>
       </div>
 
-      <!-- Section: Support (placeholder — wired in Epic 5) -->
+      <!-- Section: Support (wired in Epic 5) -->
       <div class="app-section" id="section-support" hidden>
-        <div id="supportBudgetContainer"></div>
+        <div id="supportBudgetContainer" class="budget-grid" role="region" aria-label="รายการงบอุดหนุน" aria-live="polite"></div>
       </div>
 
     </main>
@@ -610,6 +610,24 @@
 
     function switchSection(sectionId) {
       if (!SECTIONS[sectionId]) return;
+
+      // Dashboard: open modal (temporary — Epic 5 will make it a section)
+      if (sectionId === 'dashboard') {
+        if (typeof window.showDashboard === 'function') {
+          window.showDashboard();
+        }
+        closeSidebar();
+        return;
+      }
+
+      // Transfers: open modal (core modal flow stays modal)
+      if (sectionId === 'transfers') {
+        if (typeof window.openTransferModal === 'function') {
+          window.openTransferModal();
+        }
+        closeSidebar();
+        return;
+      }
 
       // Update nav
       navItems.forEach(function(item) {

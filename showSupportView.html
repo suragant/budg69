@@ -4,188 +4,71 @@
 
   window.State = window.State || {};
 
-  var _backup = null;
   var _mainStateSnapshot = null;
-  var _removedBudgetContainer = null;
-  var _removedBudgetContainer_nextSibling = null;
-  var _createdSupportIds = ['supportPanelWrapper', 'supportBudgetContainer'];
+  var _supportBuilt = false;
 
-  // Backup current layout: store each child's display/pointerEvents so we can restore exactly
-  function backupCurrentLayout(){
+  // Snapshot main state before support overwrites it
+  function snapshotMainState(){
     try {
-      var main = document.querySelector('.container') || document.body;
-      if (!main) return;
-      var children = Array.from(main.children);
-      _backup = children.map(function(ch){
-        return {
-          node: ch,
-          id: ch.id || null,
-          styleDisplay: ch.style.display || '',
-          stylePointerEvents: ch.style.pointerEvents || '',
-          inlineStyle: ch.getAttribute && ch.getAttribute('style') || null
-        };
-      });
-      console.log('backupCurrentLayout: backed up %s children', _backup.length);
-    } catch (e) {
-      console.warn('backupCurrentLayout failed', e);
-      _backup = null;
-    }
+      _mainStateSnapshot = {
+        allItems: Array.isArray(window.State.allItems) ? window.State.allItems.slice() : [],
+        filteredItems: Array.isArray(window.State.filteredItems) ? window.State.filteredItems.slice() : []
+      };
+      console.log('showSupportView: snapshot main state (%d items)', _mainStateSnapshot.allItems.length);
+    } catch(e) { console.warn('showSupportView: snapshot failed', e); }
   }
 
-  // Restore layout internal: restore display/pointerEvents and reinsert removed budget container if needed
-  function restoreLayoutInternal(){
+  // Restore main state from snapshot
+  function restoreMainState(){
     try {
-      var main = document.querySelector('.container') || document.body;
-      if (main && _backup && Array.isArray(_backup)) {
-        // Restore children styles
-        _backup.forEach(function(b){
-          try {
-            if (!b.node) return;
-            // only restore if element still in DOM
-            if (document.body.contains(b.node)) {
-              if (b.inlineStyle !== null) {
-                b.node.setAttribute('style', b.inlineStyle);
-              } else {
-                b.node.style.display = b.styleDisplay || '';
-                b.node.style.pointerEvents = b.stylePointerEvents || '';
-              }
-            }
-          } catch(e){}
-        });
-        console.log('restoreLayoutInternal: restored %s children', _backup.length);
-      }
-
-      // Re-insert removed budget container if it was removed earlier
-      if (_removedBudgetContainer) {
-        try {
-          var mainElem = document.querySelector('.container') || document.body;
-          if (_removedBudgetContainer_nextSibling && _removedBudgetContainer_nextSibling.parentNode === mainElem) {
-            mainElem.insertBefore(_removedBudgetContainer, _removedBudgetContainer_nextSibling);
-          } else {
-            mainElem.appendChild(_removedBudgetContainer);
-          }
-          // ensure visible
-          _removedBudgetContainer.style.display = '';
-          _removedBudgetContainer = null;
-          _removedBudgetContainer_nextSibling = null;
-          console.log('restoreLayoutInternal: reinserted removed budgetContainer');
-        } catch (e) {
-          console.warn('restoreLayoutInternal: reinsert budgetContainer failed', e);
+      if (_mainStateSnapshot) {
+        window.State.allItems = _mainStateSnapshot.allItems;
+        window.State.filteredItems = _mainStateSnapshot.filteredItems;
+        console.log('closeSupportView: restored main state (%d items)', _mainStateSnapshot.allItems.length);
+        _mainStateSnapshot = null;
+      } else {
+        console.warn('closeSupportView: no snapshot available, reloading main data');
+        if (typeof window.loadData === 'function') {
+          window.loadData();
         }
       }
-
-      // Remove support DOM nodes we created (wrapper + budget container) if still present
-      _createdSupportIds.forEach(function(id){
-        try {
-          var el = document.getElementById(id);
-          if (el && el.parentNode) {
-            el.parentNode.removeChild(el);
-            console.log('restoreLayoutInternal: removed created node', id);
-          }
-        } catch(e){}
-      });
-
-      // remove overlay/backdrop if present
-      var overlays = document.querySelectorAll('.modal-backdrop, .support-overlay, .overlay');
-      overlays.forEach(function(o){
-        try { if (o && o.parentNode) o.parentNode.removeChild(o); } catch(e){}
-      });
-
-      // restore body scroll
-      document.body.style.overflow = '';
-
-    } catch (e) {
-      console.warn('restoreLayoutInternal error', e);
-    }
+    } catch(e) { console.warn('closeSupportView: state restore failed', e); }
   }
 
-  function restoreLayout(){
-    restoreLayoutInternal();
-  }
-
+  // Build support UI inside section-support
   function buildSupportDom(){
-    var main = document.querySelector('.container') || document.body;
-    var wrapper = document.createElement('div');
-    wrapper.id = 'supportPanelWrapper';
-    wrapper.className = 'support-sidebar-panel';
-    wrapper.innerHTML = '\
-      <div class="support-sidebar-head">\
-        <div class="support-sidebar-title-row">\
-          <div class="support-sidebar-icon" aria-hidden="true">SP</div>\
-          <div>\
-            <div class="support-sidebar-kicker">เงินอุดหนุน</div>\
-            <div class="support-sidebar-title">งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</div>\
-          </div>\
+    if (_supportBuilt) return;
+
+    var section = document.getElementById('section-support');
+    if (!section) {
+      console.warn('section-support not found');
+      return;
+    }
+
+    // Build support header
+    var header = document.createElement('div');
+    header.className = 'support-sidebar-head';
+    header.innerHTML = '\
+      <div class="support-sidebar-title-row">\
+        <div class="support-sidebar-icon" aria-hidden="true">SP</div>\
+        <div>\
+          <div class="support-sidebar-kicker">เงินอุดหนุน</div>\
+          <div class="support-sidebar-title">งบเงินอุดหนุนที่ได้รับจัดสรรจากสำนักงบประมาณ</div>\
         </div>\
-        <div><button id="supportBackBtn" class="btn btn-secondary support-back-btn">กลับ</button></div>\
       </div>\
-      <div class="support-sidebar-body">\
-        <div class="support-sidebar-summary">\
-          <span>เลือกปีงบประมาณและโหลดรายการอุดหนุนเพื่อบันทึกเบิกและดูประวัติได้ทันที</span>\
-        </div>\
+      <div class="support-sidebar-actions">\
         <div class="support-sidebar-field">\
           <label for="supportYear">ปีงบประมาณ</label>\
           <select id="supportYear"></select>\
         </div>\
-        <div class="support-sidebar-field">\
-          <label>เริ่มงบเดือน</label>\
-          <div class="support-sidebar-static">ต.ค.</div>\
-        </div>\
         <input type="hidden" id="supportFiscal" value="10">\
-        <div class="support-sidebar-actions">\
-          <button id="supportLoad" class="btn btn-primary">โหลด</button>\
-          <button id="supportExport" class="btn btn-secondary">Export PDF</button>\
-        </div>\
+        <button id="supportLoad" class="btn btn-primary">โหลด</button>\
+        <button id="supportExport" class="btn btn-secondary">Export PDF</button>\
       </div>';
 
-    if(main.children && main.children.length > 0) main.insertBefore(wrapper, main.children[0]); else main.appendChild(wrapper);
+    section.insertBefore(header, section.firstChild);
 
-    // create container directly (no intermediate 'report' placeholder)
-    var sbc = document.getElementById('supportBudgetContainer');
-    if(!sbc){
-      sbc = document.createElement('div');
-      sbc.id = 'supportBudgetContainer';
-      sbc.className = 'budget-grid';
-      sbc.style.marginTop = '16px';
-      if(wrapper.nextSibling) main.insertBefore(sbc, wrapper.nextSibling); else main.appendChild(sbc);
-    }
-
-    try{ window._supportBudgetContainerId = 'supportBudgetContainer'; }catch(e){}
-
-    try{
-      var back = document.getElementById('supportBackBtn');
-      if(back) {
-        // remove previous handlers if any
-        back._support_back_handler && back.removeEventListener('click', back._support_back_handler);
-        var handler = function(e){
-          try { e && e.preventDefault && e.preventDefault(); } catch(e){}
-          try {
-            closeSupportView();
-            // if we pushed a history entry when opening, go back once to keep history consistent
-            try {
-              var qp = new URLSearchParams(location.search);
-              if (qp.get('page') === 'support' && history.length > 0) {
-                history.back();
-              }
-            } catch(e){}
-          } catch(err) { console.error('supportBack handler error', err); }
-        };
-        back.addEventListener('click', handler);
-        back._support_back_handler = handler;
-      }
-    }catch(e){ console.warn('back button binding failed', e); }
-
-    // allow pointer events
-    try{
-      [wrapper, sbc].forEach(function(el){
-        if(el){
-          el.style.pointerEvents = 'auto';
-          el.style.zIndex = el.style.zIndex || '1';
-        }
-      });
-    }catch(e){}
-
-    // populate year select (current year down to -4)
+    // Populate year select (current year down to -4)
     try {
       var ysel = document.getElementById('supportYear');
       if (ysel && ysel.options.length === 0) {
@@ -199,7 +82,10 @@
       }
     } catch (e) { console.warn('populate supportYear failed', e); }
 
-    // bind load/export after a short delay so other includes can register helpers
+    // Set container ID for support client
+    try { window._supportBudgetContainerId = 'supportBudgetContainer'; } catch(e){}
+
+    // Bind load/export buttons
     setTimeout(function(){
       try {
         var loadBtn = document.getElementById('supportLoad');
@@ -220,7 +106,6 @@
           exportBtn.addEventListener('click', function(e){
             try { e && e.preventDefault && e.preventDefault(); } catch(_) {}
             try {
-              // prefer client-side exporter if available
               if (typeof window.initSupportExport === 'function') {
                 try { window.initSupportExport(); } catch(e){ console.warn('initSupportExport threw', e); }
                 setTimeout(function(){
@@ -232,7 +117,6 @@
                 return;
               }
 
-              // fallback: call server inline export and open base64 PDF
               var yearEl = document.getElementById('supportYear');
               var fiscalEl = document.getElementById('supportFiscal');
               var year = yearEl ? Number(yearEl.value) : (new Date()).getFullYear();
@@ -258,9 +142,6 @@
                 console.error('export failed', err);
                 alert('เกิดข้อผิดพลาดขณะสร้าง PDF (ดู console)');
               });
-              return;
-
-              console.warn('No export mechanism available');
             } catch (err) {
               console.error('supportExport click error', err);
             }
@@ -270,9 +151,11 @@
         console.warn('support button bindings failed', e);
       }
     }, 80);
-  } // end buildSupportDom
 
-  function tryInitSupportClientWithRetry(maxAttempts, intervalMs){
+    _supportBuilt = true;
+  }
+
+  function initSupportClientWithRetry(maxAttempts, intervalMs){
     maxAttempts = maxAttempts || 20; intervalMs = intervalMs || 120;
     var attempts = 0;
     var tid = setInterval(function(){
@@ -288,78 +171,40 @@
   function showSupportView(options){
     options = options || {};
 
-    // backup layout once
-    try { backupCurrentLayout(); } catch(e){}
-
-    // Snapshot main state before support overwrites it
-    try {
-      _mainStateSnapshot = {
-        allItems: Array.isArray(window.State.allItems) ? window.State.allItems.slice() : [],
-        filteredItems: Array.isArray(window.State.filteredItems) ? window.State.filteredItems.slice() : []
-      };
-      console.log('showSupportView: snapshot main state (%d items)', _mainStateSnapshot.allItems.length);
-    } catch(e) { console.warn('showSupportView: snapshot failed', e); }
+    // Snapshot main state before switching
+    snapshotMainState();
 
     window._supportMode = true;
-    var main = document.querySelector('.container') || document.body;
 
-    try{
-      var bc = document.getElementById('budgetContainer');
-      if(bc){
-        _removedBudgetContainer_nextSibling = bc.nextSibling;
-        _removedBudgetContainer = bc;
-        if(bc.parentNode) bc.parentNode.removeChild(bc);
-        console.log('Support view: budgetContainer removed temporarily');
-      }
-    }catch(e){ console.warn('could not remove budgetContainer', e); }
-
-    // hide all non-support children
-    Array.from(main.children).forEach(function(ch){
-      try{
-        if(ch.id && (ch.id.indexOf('support') === 0 || ch.id === 'supportPanelWrapper' || ch.id === 'supportReport' || ch.id === 'supportBudgetContainer')) return;
-        ch.style.display = 'none';
-        try{ ch.style.pointerEvents = 'none'; }catch(e){}
-      }catch(e){}
-    });
-    try{ main.setAttribute('data-support-active','1'); }catch(e){}
+    // Build support DOM if not already done
     buildSupportDom();
-    Array.from(document.querySelectorAll('#supportPanelWrapper, #supportBudgetContainer')).forEach(function(el){ el.style.display = ''; el.style.pointerEvents = 'auto'; });
-    tryInitSupportClientWithRetry(25, 120);
+
+    // Use shell navigation to switch to support section
+    if (typeof window.switchSection === 'function') {
+      window.switchSection('support');
+    }
+
+    // Initialize support client
+    initSupportClientWithRetry(25, 120);
 
     // Only push history entry on explicit user navigation (not popstate or initial load)
     if (!options.skipPushState) {
       try{ history.pushState({page:'support'}, 'Support', window.location.pathname + '?page=support'); }catch(e){}
     }
+
     console.log('showSupportView done; supportMode=', !!window._supportMode);
   }
 
   function closeSupportView(){
-    try{
-      window._supportMode = false;
-      var main = document.querySelector('.container');
-      if(main){
-        main.removeAttribute('data-support-active');
-      }
-    }catch(e){}
+    window._supportMode = false;
 
-    // restore main state before layout restore
-    try {
-      if (_mainStateSnapshot) {
-        window.State.allItems = _mainStateSnapshot.allItems;
-        window.State.filteredItems = _mainStateSnapshot.filteredItems;
-        console.log('closeSupportView: restored main state (%d items)', _mainStateSnapshot.allItems.length);
-        _mainStateSnapshot = null;
-      } else {
-        // fallback: reload main data from server
-        console.warn('closeSupportView: no snapshot available, reloading main data');
-        if (typeof window.loadData === 'function') {
-          window.loadData();
-        }
-      }
-    } catch(e) { console.warn('closeSupportView: state restore failed', e); }
+    // Restore main state
+    restoreMainState();
 
-    // restore layout and cleanup
-    try { restoreLayout(); } catch(e){}
+    // Use shell navigation to switch back to budget items
+    if (typeof window.switchSection === 'function') {
+      window.switchSection('budget-items');
+    }
 
     // Re-render main cards from restored state
     try {
@@ -377,12 +222,10 @@
     try {
       var state = e.state || null;
       if (state && state.page === 'support') {
-        // when navigating forward/back to the support state, ensure view visible
         if (!window._supportMode) {
           showSupportView({skipPushState: true});
         }
       } else {
-        // When leaving support state, ensure view closed
         if (window._supportMode) {
           closeSupportView();
         }
@@ -397,7 +240,7 @@
   try{
     var qp = new URLSearchParams(location.search);
     if(qp.get('page') === 'support'){
-      setTimeout(function(){ showSupportView({skipPushState: true}); tryInitSupportClientWithRetry(25,120); }, 200);
+      setTimeout(function(){ showSupportView({skipPushState: true}); }, 200);
     }
   }catch(e){}
 })();
