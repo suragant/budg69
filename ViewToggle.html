@@ -36,8 +36,8 @@
 
 #tileHeader {
   display: grid;
-  grid-template-columns: 180px 160px 160px minmax(260px, 1fr) 110px 110px 120px 140px;
-  gap: 0 12px;
+  grid-template-columns: 160px 140px 140px minmax(200px, 1fr) 100px 100px 100px 90px 120px;
+  gap: 0 10px;
   padding: 9px 16px;
   background: #667eea;
   color: white;
@@ -82,9 +82,9 @@
 
 #budgetContainer.tile-view .budget-card {
   display: grid !important;
-  grid-template-columns: 180px 160px 160px minmax(260px, 1fr) 110px 110px 120px 140px !important;
+  grid-template-columns: 160px 140px 140px minmax(200px, 1fr) 100px 100px 100px 90px 120px !important;
   align-items: start !important;
-  gap: 0 12px !important;
+  gap: 0 10px !important;
   border-radius: 0 !important;
   border: none !important;
   border-bottom: 1px solid #eee !important;
@@ -170,8 +170,21 @@
   align-self: start;
 }
 
-#budgetContainer.tile-view .card-actions {
+.tile-status {
   grid-column: 8;
+  grid-row: 1;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  align-self: start;
+}
+.tile-status.status-available { color: #4CAF50; }
+.tile-status.status-warning   { color: #FF9800; }
+.tile-status.status-critical  { color: #f44336; }
+.tile-status.status-depleted  { color: #9E9E9E; }
+
+#budgetContainer.tile-view .card-actions {
+  grid-column: 9;
   grid-row: 1;
   padding: 0 !important;
   gap: 6px !important;
@@ -191,7 +204,7 @@
   'use strict';
 
   var STORAGE_KEY = 'budgetViewMode';
-  var currentMode = 'card';
+  var currentMode = 'tile';  // Epic 3: default to dense list/table
   var _btn = null;
   var tileSortKey = '';
   var tileSortDir = 'asc';
@@ -256,7 +269,7 @@
   function cleanupTileInjections() {
     var container = document.getElementById('budgetContainer');
     if (!container) return;
-    container.querySelectorAll('.tile-work, .tile-department, .tile-budget-type, .tile-item-name, .tile-amt').forEach(function (el) {
+    container.querySelectorAll('.tile-work, .tile-department, .tile-budget-type, .tile-item-name, .tile-amt, .tile-status').forEach(function (el) {
       el.parentNode && el.parentNode.removeChild(el);
     });
   }
@@ -290,7 +303,8 @@
       '<span class="th-right"><button type="button" class="tile-sort-btn" data-sort-key="budget">งบประมาณ</button></span>' +
       '<span class="th-right"><button type="button" class="tile-sort-btn" data-sort-key="used">เบิกจ่าย</button></span>' +
       '<span class="th-right"><button type="button" class="tile-sort-btn" data-sort-key="remaining">คงเหลือ</button></span>' +
-      '<span class="th-right">การดำเนินการ</span>';
+      '<span class="th-right"><button type="button" class="tile-sort-btn" data-sort-key="percentUsed">% ใช้</button></span>' +
+      '<span class="th-right">ดำเนินการ</span>';
     bindTileHeaderSorting(header);
     updateTileSortIndicators();
 
@@ -373,6 +387,29 @@
         card.insertBefore(rDiv, actions);
         card.insertBefore(uDiv, rDiv);
         card.insertBefore(bDiv, uDiv);
+
+        // Add percent/status column
+        if (!card.querySelector('.tile-status')) {
+          var budgetNum = Number(budget) || 0;
+          var usedNum = Number(used) || 0;
+          var pct = budgetNum > 0 ? (usedNum / budgetNum * 100) : 0;
+          var statusDiv = document.createElement('div');
+          statusDiv.className = 'tile-status';
+          if (pct >= 100) {
+            statusDiv.className += ' status-depleted';
+            statusDiv.textContent = 'หมดงบ';
+          } else if (pct >= 90) {
+            statusDiv.className += ' status-critical';
+            statusDiv.textContent = pct.toFixed(0) + '%';
+          } else if (pct >= 80) {
+            statusDiv.className += ' status-warning';
+            statusDiv.textContent = pct.toFixed(0) + '%';
+          } else {
+            statusDiv.className += ' status-available';
+            statusDiv.textContent = pct.toFixed(0) + '%';
+          }
+          card.insertBefore(statusDiv, actions);
+        }
       }
     });
   }
@@ -410,8 +447,8 @@
 
   function updateBtn(mode) {
     if (!_btn) return;
-    _btn.innerHTML = mode === 'tile' ? '&#9638; มุมมอง Card' : '&#8801; มุมมอง Tile';
-    _btn.title     = mode === 'tile' ? 'สลับเป็นมุมมอง Card' : 'สลับเป็นมุมมอง Tile';
+    _btn.innerHTML = mode === 'tile' ? '&#9638; มุมมอง Card' : '&#8801; มุมอง Table';
+    _btn.title     = mode === 'tile' ? 'สลับเป็นมุมมอง Card' : 'สลับเป็นมุมมอง Table';
   }
 
   function createBtn() {
@@ -421,21 +458,27 @@
     btn.id   = 'viewToggleBtn';
     btn.type = 'button';
     _btn = btn;
-    var dashBtn = document.querySelector('[data-action="show-dashboard"]');
-    if (dashBtn && dashBtn.parentNode) dashBtn.parentNode.insertBefore(btn, dashBtn.nextSibling);
-    else { var h = document.querySelector('.header'); if (h) h.appendChild(btn); }
+    // Place in commandbar or section header
+    var cmdbar = document.querySelector('.commandbar-right');
+    var filterSection = document.getElementById('searchFilterSection');
+    if (cmdbar) {
+      cmdbar.insertBefore(btn, cmdbar.firstChild);
+    } else if (filterSection) {
+      filterSection.insertBefore(btn, filterSection.firstChild);
+    }
   }
 
   function ensureBtnAttached() {
-    var dashBtn = document.querySelector('[data-action="show-dashboard"]');
+    var cmdbar = document.querySelector('.commandbar-right');
     var btn = document.getElementById('viewToggleBtn') || _btn;
     if (!btn) {
       createBtn();
       btn = _btn;
     }
     if (!btn) return;
-    if (dashBtn && dashBtn.parentNode && btn.parentNode !== dashBtn.parentNode) {
-      dashBtn.parentNode.insertBefore(btn, dashBtn.nextSibling);
+    // Ensure button is in the right place
+    if (cmdbar && btn.parentNode !== cmdbar) {
+      cmdbar.insertBefore(btn, cmdbar.firstChild);
     }
   }
 
@@ -465,7 +508,7 @@
     }
 
     createBtn();
-    try { currentMode = localStorage.getItem(STORAGE_KEY) || 'card'; } catch (e) {}
+    try { currentMode = localStorage.getItem(STORAGE_KEY) || 'tile'; } catch (e) {}
     ensureBtnAttached();
     updateBtn(currentMode);
     _btn.addEventListener('click', function () {
