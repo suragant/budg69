@@ -113,10 +113,8 @@
 
   function delegatedClickHandler(e) {
     try {
-      if (window._supportBudgetContainerId) {
-        var supportContainer = document.getElementById(window._supportBudgetContainerId);
-        if (supportContainer && supportContainer.contains(e.target)) return;
-      }
+      // Support container is handled by safe event interception in Index.html
+      // No need to skip here
 
       var btn = e.target && e.target.closest ? e.target.closest('[data-action], [data-id], .record-btn, button') : null;
       if (!btn) return;

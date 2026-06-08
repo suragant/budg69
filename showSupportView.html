@@ -64,6 +64,7 @@
         <input type="hidden" id="supportFiscal" value="10">\
         <button id="supportLoad" class="btn btn-primary">โหลด</button>\
         <button id="supportExport" class="btn btn-secondary">Export PDF</button>\
+        <button id="supportBackBtn" class="btn btn-secondary">กลับ</button>\
       </div>';
 
     section.insertBefore(header, section.firstChild);
@@ -150,6 +151,17 @@
       } catch (e) {
         console.warn('support button bindings failed', e);
       }
+
+      // Bind back button
+      try {
+        var backBtn = document.getElementById('supportBackBtn');
+        if (backBtn) {
+          backBtn.addEventListener('click', function() {
+            closeSupportView();
+            try { history.back(); } catch(e) {}
+          });
+        }
+      } catch(e) { console.warn('back button binding failed', e); }
     }, 80);
 
     _supportBuilt = true;
@@ -205,6 +217,16 @@
     if (typeof window.switchSection === 'function') {
       window.switchSection('budget-items');
     }
+
+    // Ensure main UI elements are visible
+    try {
+      var searchSection = document.getElementById('searchFilterSection');
+      var budgetContainer = document.getElementById('budgetContainer');
+      var loadingDiv = document.getElementById('loadingDiv');
+      if (searchSection) searchSection.style.display = '';
+      if (budgetContainer) budgetContainer.style.display = '';
+      if (loadingDiv) loadingDiv.style.display = 'none';
+    } catch(e) {}
 
     // Re-render main cards from restored state
     try {

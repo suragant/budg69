@@ -404,14 +404,20 @@
       if (container) container.innerHTML = renderInlineState(err && err.message ? err.message : String(err || '\u0e42\u0e2b\u0e25\u0e14\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08'), 'error');
     };
 
+    // Detect support items (SP prefix) and use appropriate RPC
+    var isSupport = String(item.itemId || '').toUpperCase().indexOf('SP') === 0;
+    var rpcFn = isSupport ? 'getTransactionHistorySupport' : 'getTransactionHistory';
     try {
-      window.rpcWithRetry('getTransactionHistory', [item.itemId]).then(onSuccess).catch(onFailure);
+      window.rpcWithRetry(rpcFn, [item.itemId]).then(onSuccess).catch(onFailure);
       return true;
     } catch (e) {
       onFailure(e);
     }
     return false;
   }
+
+  // Expose openHistoryModal as alias for openHistory (used by support_client.html)
+  window.openHistoryModal = window.openHistoryModal || window.openHistory || openHistory;
 
   function ensureDashboardModal() {
     var modal = document.getElementById('dashboardModal');
@@ -618,11 +624,8 @@
     }, 50);
   }
   function showDashboard() {
-    // Switch to dashboard section in shell
-    if (typeof window.switchSection === 'function') {
-      window.switchSection('dashboard');
-    }
-
+    // Section is already visible — switchSection handles visibility
+    // Just load data into the container
     var container = document.getElementById('dashboardContainer');
     if (container) container.innerHTML = '<div style="color:#666;">\u0e01\u0e33\u0e25\u0e31\u0e07\u0e42\u0e2b\u0e25\u0e14 Dashboard...</div>';
 

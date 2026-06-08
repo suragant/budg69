@@ -261,13 +261,38 @@
       return false;
     }
 
+    function findValidContainerForTarget(target) {
+      try {
+        var btn = findActionButton(target);
+        if (!btn) return null;
+
+        // Check support container first
+        if (window._supportBudgetContainerId) {
+          var customId = String(window._supportBudgetContainerId).trim();
+          if (/^[a-zA-Z0-9_-]+$/.test(customId)) {
+            var elem = document.getElementById(customId);
+            if (isValidContainer(elem) && elem.contains(btn)) return elem;
+          }
+        }
+
+        // Check all safe containers
+        for (var i = 0; i < SAFE_CONTAINER_IDS.length; i++) {
+          var container = document.getElementById(SAFE_CONTAINER_IDS[i]);
+          if (isValidContainer(container) && container.contains(btn)) return container;
+        }
+      } catch (e) {
+        console.warn('findValidContainerForTarget error', e);
+      }
+      return null;
+    }
+
     function captureHandler(e) {
       try {
-        const container = resolveContainerSafely();
+        var container = findValidContainerForTarget(e.target);
         if (!container) return;
 
-        const btn = findActionButton(e.target);
-        if (!btn || !container.contains(btn)) return;
+        var btn = findActionButton(e.target);
+        if (!btn) return;
 
         const handled = handleActionForBtn(btn);
         if (handled) {
@@ -615,10 +640,35 @@
     function switchSection(sectionId) {
       if (!SECTIONS[sectionId]) return;
 
-      // Dashboard: open modal (temporary — Epic 5 will make it a section)
+      // Dashboard: switch to section and load data
       if (sectionId === 'dashboard') {
+        // Update nav
+        navItems.forEach(function(item) {
+          var isActive = item.getAttribute('data-section') === sectionId;
+          item.classList.toggle('active', isActive);
+          if (isActive) item.setAttribute('aria-current','page');
+          else item.removeAttribute('aria-current');
+        });
+        document.querySelectorAll('.app-section').forEach(function(sec) {
+          var isTarget = sec.id === 'section-' + sectionId;
+          sec.classList.toggle('active', isTarget);
+          if (isTarget) sec.removeAttribute('hidden');
+          else sec.setAttribute('hidden','');
+        });
+        if (title) title.textContent = SECTIONS[sectionId].title;
+        window.State = window.State || {};
+        window.State.activeSection = sectionId;
+        closeSidebar();
         if (typeof window.showDashboard === 'function') {
           window.showDashboard();
+        }
+        return;
+      }
+
+      // Support: call showSupportView which handles init
+      if (sectionId === 'support') {
+        if (typeof window.showSupportView === 'function') {
+          window.showSupportView();
         }
         closeSidebar();
         return;
