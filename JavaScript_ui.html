@@ -737,7 +737,7 @@
 
     if (!payload || payload.success === false) {
       setLoading(false);
-      setError(payload && payload.message ? payload.message : 'เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เนเธซเธฅเธ”เธเนเธญเธกเธนเธฅเนเธ”เน');
+      setError(payload && payload.message ? payload.message : 'โหลดข้อมูลไม่สำเร็จ');
       if (section) section.style.display = 'none';
       if (container) container.style.display = 'none';
       return;
@@ -764,7 +764,7 @@
   window.updateAlertBadge = window.updateAlertBadge || updateAlertBadge;
   window.showAlerts = window.showAlerts || function() {
     if (typeof window.openAlertsModal === 'function') return window.openAlertsModal();
-    if (typeof window.showCustomAlert === 'function') return window.showCustomAlert('info', 'เนเธเนเธเน€เธ•เธทเธญเธ', 'เธขเธฑเธเนเธกเนเธกเธตเธฃเธฐเธเธเนเธชเธ”เธเนเธเนเธเน€เธ•เธทเธญเธ');
+    if (typeof window.showCustomAlert === 'function') return window.showCustomAlert('info', 'แจ้งเตือน', 'คลิกเพื่อดูแจ้งเตือน');
   };
 })(window, document);
 </script>
