@@ -1,0 +1,5 @@
+.aider*
+.claude/
+.clasp.json
+node_modules/
+*.log
