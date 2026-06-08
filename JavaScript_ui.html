@@ -537,7 +537,7 @@
     });
   }
     function renderDashboard(payload) {
-    var container = ensureDashboardModal().querySelector('#dashboardContainer');
+    var container = document.getElementById('dashboardContainer');
     if (!container) return;
     var data = [];
     if (payload && Array.isArray(payload.data)) data = payload.data;
@@ -618,10 +618,13 @@
     }, 50);
   }
   function showDashboard() {
-    var modal = ensureDashboardModal();
-    var container = modal.querySelector('#dashboardContainer');
+    // Switch to dashboard section in shell
+    if (typeof window.switchSection === 'function') {
+      window.switchSection('dashboard');
+    }
+
+    var container = document.getElementById('dashboardContainer');
     if (container) container.innerHTML = '<div style="color:#666;">\u0e01\u0e33\u0e25\u0e31\u0e07\u0e42\u0e2b\u0e25\u0e14 Dashboard...</div>';
-    if (typeof window.openModal === 'function') window.openModal(modal);
 
     var onSuccess = function(res) { renderDashboard(res || {}); };
     var onFailure = function(err) {

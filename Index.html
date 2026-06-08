@@ -443,8 +443,15 @@
         <div id="budgetContainer" class="budget-grid" style="display: none;" role="region" aria-label="รายการงบประมาณ" aria-live="polite"></div>
       </div>
 
-      <!-- Section: Dashboard (placeholder — wired in Epic 6) -->
+      <!-- Section: Dashboard (Epic 6: section-based) -->
       <div class="app-section" id="section-dashboard" hidden>
+        <div class="dashboard-header">
+          <h2>Dashboard</h2>
+          <div class="dashboard-actions">
+            <button type="button" class="btn btn-secondary" data-action="print-dashboard">พิมพ์</button>
+            <button type="button" class="btn btn-primary" id="dashboardExportBtn" data-action="export-dashboard">Export PDF</button>
+          </div>
+        </div>
         <div id="dashboardContainer"></div>
       </div>
 

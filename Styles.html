@@ -1912,4 +1912,71 @@ body.app-shell-ready { padding: 0 !important; display: flex; min-height: 100vh; 
     justify-content: flex-start;
   }
 }
+
+/* ==================== DASHBOARD SECTION (Epic 6) ==================== */
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dashboard-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--app-ink);
+  margin: 0;
+}
+
+.dashboard-actions {
+  display: flex;
+  gap: 8px;
+}
+
+#dashboardContainer {
+  background: #fff;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+#dashboardContainer .chart-container {
+  position: relative;
+  height: 300px;
+}
+
+#dashboardContainer .table-wrapper {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+
+#dashboardContainer table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+#dashboardContainer th {
+  background: var(--app-bg);
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--app-muted);
+  border-bottom: 2px solid var(--app-border);
+}
+
+#dashboardContainer td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+#dashboardContainer tr:hover td {
+  background: #f8fafc;
+}
+
+#dashboardContainer tfoot td {
+  font-weight: 700;
+  background: var(--app-bg);
+}
 </style>
