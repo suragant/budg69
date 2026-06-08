@@ -48,6 +48,7 @@ body {
   margin: 0 auto; 
 }
 
+/* Legacy header — now handled by .app-commandbar in unified shell */
 .header { 
   background: white; 
   padding: 20px; 
@@ -789,6 +790,7 @@ body {
   gap: 14px;
 }
 
+/* Legacy header.app-commandbar — now handled by .app-commandbar in unified shell */
 .header.app-commandbar,
 .search-filter-section,
 .summary-strip {
@@ -1530,6 +1532,179 @@ body {
 
   .support-sidebar-title {
     font-size: 18px;
+  }
+}
+
+/* ==================== UNIFIED APP SHELL (Epic 1) ==================== */
+body.app-shell-ready { padding: 0 !important; display: flex; min-height: 100vh; }
+
+.app-sidebar {
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  width: 240px;
+  background: var(--app-navy);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  z-index: 200;
+  transition: transform 0.25s ease;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar-brand .brand-mark {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.15);
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 800;
+}
+
+.sidebar-brand-text {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,0.7);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-nav-item:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.sidebar-nav-item.active {
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+}
+
+.sidebar-nav-icon {
+  width: 20px; height: 20px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.sidebar-nav-item.active .sidebar-nav-icon { opacity: 1; }
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 190;
+}
+
+.sidebar-overlay.open { display: block; }
+
+.app-main {
+  flex: 1;
+  margin-left: 240px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-commandbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  background: rgba(255,255,255,0.94);
+  border-bottom: 1px solid var(--app-border);
+  backdrop-filter: blur(14px);
+}
+
+.commandbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.commandbar-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--app-ink);
+}
+
+.sidebar-toggle {
+  display: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  color: var(--app-ink);
+}
+
+.sidebar-toggle:hover { background: var(--app-border); }
+
+.commandbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.commandbar-user {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.app-content {
+  flex: 1;
+  padding: 18px;
+}
+
+.app-section { display: none; }
+.app-section.active { display: block; }
+
+/* Mobile */
+@media (max-width: 900px) {
+  .app-sidebar {
+    transform: translateX(-100%);
+  }
+  .app-sidebar.open {
+    transform: translateX(0);
+  }
+  .app-main {
+    margin-left: 0;
+  }
+  .sidebar-toggle {
+    display: flex;
   }
 }
 </style>
