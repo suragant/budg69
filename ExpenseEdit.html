@@ -485,13 +485,7 @@
     return text;
   }
   function callExpenseRpc(fnName, args) {
-    // Detect support items and route to support-specific RPC
-    var itemId = window.State && window.State.selectedItem && window.State.selectedItem.itemId;
-    var isSupport = String(itemId || '').toUpperCase().indexOf('SP') === 0;
-    if (isSupport) {
-      var supportFn = fnName + 'Support';
-      return window.rpcWithRetry(supportFn, args || []);
-    }
+    // Backend editExpense/cancelExpense handle all items (regular + support)
     return window.rpcWithRetry(fnName, args || []);
   }
 
@@ -699,9 +693,7 @@
     if (historyModal && (historyModal.classList.contains('active') || historyModal.style.display !== 'none')) {
       var itemId = window.State && window.State.selectedItem && (window.State.selectedItem.itemId || window.State.selectedItem.rowIndex);
       if (itemId) {
-        var isSupport = String(itemId || '').toUpperCase().indexOf('SP') === 0;
-        var rpcFn = isSupport ? 'getTransactionHistorySupport' : 'getTransactionHistory';
-        window.rpcWithRetry(rpcFn, [itemId]).then(function (h) {
+        window.rpcWithRetry('getTransactionHistory', [itemId]).then(function (h) {
           if (typeof window.showHistory === 'function') window.showHistory(h);
         });
       }
