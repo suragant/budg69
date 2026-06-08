@@ -640,6 +640,14 @@
     function switchSection(sectionId) {
       if (!SECTIONS[sectionId]) return;
 
+      // If leaving support, close it first
+      if (window._supportMode && sectionId !== 'support') {
+        if (typeof window.closeSupportView === 'function') {
+          window.closeSupportView();
+          return;
+        }
+      }
+
       // Dashboard: switch to section and load data
       if (sectionId === 'dashboard') {
         // Update nav

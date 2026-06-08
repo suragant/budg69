@@ -329,32 +329,56 @@ function cancelExpense(logRowIndex, reason) {
     const amount = logEntry.amount;
     if (!itemId || !amount) return createResponse(false, 'ข้อมูลรายการไม่ครบ');
 
-    const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
-    const allData = budgetSheet.getDataRange().getValues();
-    const cols    = getColumnIndices(allData[0]);
-    if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น');
+    const isSupportItem = String(itemId).toUpperCase().indexOf('SP') === 0;
 
-    const foundRows = findBudgetRowIndicesByItemIds([itemId], allData, cols);
-    const budgetRow = foundRows[itemId.toUpperCase()];
-    if (!budgetRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
-
-    const budgetRowData = allData[budgetRow - 1];
-    const currentUsed   = parseNumberSafe(budgetRowData[cols.used]);
-    const budget        = parseNumberSafe(budgetRowData[cols.budget]);
-    const newUsed       = parseFloat((currentUsed - amount).toFixed(2));
-    const newRemaining  = parseFloat((budget - newUsed).toFixed(2));
-
-    if (newUsed < 0) return createResponse(false, 'ไม่สามารถ reverse ได้: ยอด used จะติดลบ');
-
-    if (Math.abs(cols.used - cols.remaining) === 1) {
-      const startCol = Math.min(cols.used, cols.remaining) + 1;
-      budgetSheet.getRange(budgetRow, startCol, 1, 2).setValues([
-        cols.used < cols.remaining ? [newUsed, newRemaining] : [newRemaining, newUsed]
-      ]);
+    let sheet, row, currentUsed, budget;
+    if (isSupportItem) {
+      const supportSheet = resolveSheet(SUPPORT_SHEET_NAME);
+      if (!supportSheet) return createResponse(false, 'ไม่พบ Sheet งบเงินอุดหนุน');
+      const sHeaders = supportSheet.getRange(1, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+      const sMap = mapSupportColumns(sHeaders);
+      const sRow = findRowIndexInSheetSupport(itemId);
+      if (!sRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
+      const sVals = supportSheet.getRange(sRow, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+      currentUsed = _isValidIndex(sMap.usedMoney) ? parseNumberSafe(sVals[sMap.usedMoney] || 0) : 0;
+      budget = _isValidIndex(sMap.budgetMoney) ? parseNumberSafe(sVals[sMap.budgetMoney] || 0) : 0;
+      const newUsed = parseFloat((currentUsed - amount).toFixed(2));
+      const newRemaining = parseFloat((budget - newUsed).toFixed(2));
+      if (newUsed < 0) return createResponse(false, 'ไม่สามารถ reverse ได้: ยอด used จะติดลบ');
+      if (_isValidIndex(sMap.usedMoney)) supportSheet.getRange(sRow, sMap.usedMoney + 1).setValue(newUsed);
+      if (_isValidIndex(sMap.remainingMoney)) supportSheet.getRange(sRow, sMap.remainingMoney + 1).setValue(newRemaining);
+      sheet = supportSheet;
+      row = sRow;
+      currentUsed = newUsed;
+      budget = newRemaining;
     } else {
-      budgetSheet.getRange(budgetRow, cols.used      + 1).setValue(newUsed);
-      budgetSheet.getRange(budgetRow, cols.remaining + 1).setValue(newRemaining);
+      const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
+      if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
+      const allData = budgetSheet.getDataRange().getValues();
+      const cols    = getColumnIndices(allData[0]);
+      if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น');
+      const foundRows = findBudgetRowIndicesByItemIds([itemId], allData, cols);
+      const budgetRow = foundRows[itemId.toUpperCase()];
+      if (!budgetRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
+      const budgetRowData = allData[budgetRow - 1];
+      const cu   = parseNumberSafe(budgetRowData[cols.used]);
+      const b    = parseNumberSafe(budgetRowData[cols.budget]);
+      const newUsed       = parseFloat((cu - amount).toFixed(2));
+      const newRemaining  = parseFloat((b - newUsed).toFixed(2));
+      if (newUsed < 0) return createResponse(false, 'ไม่สามารถ reverse ได้: ยอด used จะติดลบ');
+      if (Math.abs(cols.used - cols.remaining) === 1) {
+        const startCol = Math.min(cols.used, cols.remaining) + 1;
+        budgetSheet.getRange(budgetRow, startCol, 1, 2).setValues([
+          cols.used < cols.remaining ? [newUsed, newRemaining] : [newRemaining, newUsed]
+        ]);
+      } else {
+        budgetSheet.getRange(budgetRow, cols.used      + 1).setValue(newUsed);
+        budgetSheet.getRange(budgetRow, cols.remaining + 1).setValue(newRemaining);
+      }
+      sheet = budgetSheet;
+      row = budgetRow;
+      currentUsed = newUsed;
+      budget = newRemaining;
     }
 
     if (logCols.status   !== -1) logSheet.getRange(logRowIndex, logCols.status   + 1).setValue('CANCELLED');
@@ -423,33 +447,49 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
     const diff      = amt - oldAmount;
     if (!itemId) return createResponse(false, 'ไม่พบ Item ID ในรายการนี้');
 
-    const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
-    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
-    const allData = budgetSheet.getDataRange().getValues();
-    const cols    = getColumnIndices(allData[0]);
-    if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น');
+    const isSupportItem = String(itemId).toUpperCase().indexOf('SP') === 0;
 
-    const foundRows = findBudgetRowIndicesByItemIds([itemId], allData, cols);
-    const budgetRow = foundRows[itemId.toUpperCase()];
-    if (!budgetRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
-
-    const budgetRowData = allData[budgetRow - 1];
-    const currentUsed   = parseNumberSafe(budgetRowData[cols.used]);
-    const budget        = parseNumberSafe(budgetRowData[cols.budget]);
-    const newUsed       = parseFloat((currentUsed + diff).toFixed(2));
-    const newRemaining  = parseFloat((budget - newUsed).toFixed(2));
-
-    if (newUsed < 0)      return createResponse(false, 'ยอดที่แก้ไขทำให้ยอด used ติดลบ');
-    if (newRemaining < 0) return createResponse(false, 'ยอดเบิกจ่ายเกินงบประมาณที่ตั้งไว้');
-
-    if (Math.abs(cols.used - cols.remaining) === 1) {
-      const startCol = Math.min(cols.used, cols.remaining) + 1;
-      budgetSheet.getRange(budgetRow, startCol, 1, 2).setValues([
-        cols.used < cols.remaining ? [newUsed, newRemaining] : [newRemaining, newUsed]
-      ]);
+    if (isSupportItem) {
+      const supportSheet = resolveSheet(SUPPORT_SHEET_NAME);
+      if (!supportSheet) return createResponse(false, 'ไม่พบ Sheet งบเงินอุดหนุน');
+      const sHeaders = supportSheet.getRange(1, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+      const sMap = mapSupportColumns(sHeaders);
+      const sRow = findRowIndexInSheetSupport(itemId);
+      if (!sRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
+      const sVals = supportSheet.getRange(sRow, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+      const currentUsed = _isValidIndex(sMap.usedMoney) ? parseNumberSafe(sVals[sMap.usedMoney] || 0) : 0;
+      const budget = _isValidIndex(sMap.budgetMoney) ? parseNumberSafe(sVals[sMap.budgetMoney] || 0) : 0;
+      const newUsed = parseFloat((currentUsed + diff).toFixed(2));
+      const newRemaining = parseFloat((budget - newUsed).toFixed(2));
+      if (newUsed < 0) return createResponse(false, 'ยอดที่แก้ไขทำให้ยอด used ติดลบ');
+      if (newRemaining < 0) return createResponse(false, 'ยอดเบิกจ่ายเกินงบประมาณที่ตั้งไว้');
+      if (_isValidIndex(sMap.usedMoney)) supportSheet.getRange(sRow, sMap.usedMoney + 1).setValue(newUsed);
+      if (_isValidIndex(sMap.remainingMoney)) supportSheet.getRange(sRow, sMap.remainingMoney + 1).setValue(newRemaining);
     } else {
-      budgetSheet.getRange(budgetRow, cols.used      + 1).setValue(newUsed);
-      budgetSheet.getRange(budgetRow, cols.remaining + 1).setValue(newRemaining);
+      const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
+      if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
+      const allData = budgetSheet.getDataRange().getValues();
+      const cols    = getColumnIndices(allData[0]);
+      if (cols.used === -1 || cols.remaining === -1) return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น');
+      const foundRows = findBudgetRowIndicesByItemIds([itemId], allData, cols);
+      const budgetRow = foundRows[itemId.toUpperCase()];
+      if (!budgetRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
+      const budgetRowData = allData[budgetRow - 1];
+      const currentUsed   = parseNumberSafe(budgetRowData[cols.used]);
+      const budget        = parseNumberSafe(budgetRowData[cols.budget]);
+      const newUsed       = parseFloat((currentUsed + diff).toFixed(2));
+      const newRemaining  = parseFloat((budget - newUsed).toFixed(2));
+      if (newUsed < 0)      return createResponse(false, 'ยอดที่แก้ไขทำให้ยอด used ติดลบ');
+      if (newRemaining < 0) return createResponse(false, 'ยอดเบิกจ่ายเกินงบประมาณที่ตั้งไว้');
+      if (Math.abs(cols.used - cols.remaining) === 1) {
+        const startCol = Math.min(cols.used, cols.remaining) + 1;
+        budgetSheet.getRange(budgetRow, startCol, 1, 2).setValues([
+          cols.used < cols.remaining ? [newUsed, newRemaining] : [newRemaining, newUsed]
+        ]);
+      } else {
+        budgetSheet.getRange(budgetRow, cols.used      + 1).setValue(newUsed);
+        budgetSheet.getRange(budgetRow, cols.remaining + 1).setValue(newRemaining);
+      }
     }
 
     if (logCols.status   !== -1) logSheet.getRange(logRowIndex, logCols.status   + 1).setValue('EDITED');
