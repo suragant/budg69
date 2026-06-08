@@ -180,6 +180,9 @@
     var statusFilter = (document.getElementById('budgetStatusFilter') || {}).value || 'all';
     var sortFilter = (document.getElementById('sortFilter') || {}).value || 'default';
 
+    // Unified search: searchItemId searches across all text fields
+    var unifiedQuery = inputs.itemId.trim().toLowerCase();
+
     var filtered = (State.allItems || []).filter(function(item){
       var itemId = String(item.itemId || '').toLowerCase();
       var itemText = String(item.item || '').toLowerCase();
@@ -188,7 +191,16 @@
       var percent = item.budget ? ((Number(item.used || 0) / Number(item.budget || 1)) * 100) : 0;
       var remaining = Number(item.remaining || 0);
 
-      if (inputs.itemId && itemId.indexOf(inputs.itemId.trim().toLowerCase()) === -1) return false;
+      // Unified search: match against any text field
+      if (unifiedQuery) {
+        var matchesUnified = itemId.indexOf(unifiedQuery) !== -1 ||
+                            itemText.indexOf(unifiedQuery) !== -1 ||
+                            workText.indexOf(unifiedQuery) !== -1 ||
+                            deptText.indexOf(unifiedQuery) !== -1;
+        if (!matchesUnified) return false;
+      }
+
+      // Individual field searches (for advanced filters)
       if (inputs.item && itemText.indexOf(inputs.item.trim().toLowerCase()) === -1) return false;
       if (inputs.work && workText.indexOf(inputs.work.trim().toLowerCase()) === -1) return false;
       if (inputs.department && deptText.indexOf(inputs.department.trim().toLowerCase()) === -1) return false;

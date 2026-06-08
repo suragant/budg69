@@ -378,69 +378,66 @@
         </section>
 
         <div id="searchFilterSection" class="search-filter-section" style="display: none;">
-          <div class="filter-heading">
-            <div>
-              <h2>รายการงบประมาณ</h2>
-              <div class="filter-summary">
-                <span id="filterResultCount" aria-live="polite" aria-atomic="true">แสดง 0 รายการ</span>
-                <span id="filterWarning" style="display: none;" role="alert">
-                  <span id="warningCount">0</span> รายการใกล้หมดงบ
+          <div class="filter-toolbar">
+            <div class="filter-toolbar-left">
+              <div class="filter-search-inline">
+                <label class="sr-only" for="searchItemId">ค้นหา</label>
+                <input type="text" id="searchItemId" class="search-input search-input-sm" placeholder="ค้นหา Item ID หรือชื่อรายการ..." aria-label="ค้นหารายการ">
+                <button class="btn btn-ghost btn-sm" data-action="reset-filters" aria-label="ล้างตัวกรอง" title="ล้างตัวกรอง">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              <div class="filter-chips">
+                <select id="budgetStatusFilter" class="filter-chip-select" aria-label="ตัวกรองสถานะ">
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="available">ยังเหลืองบ</option>
+                  <option value="warning">ใกล้หมด</option>
+                  <option value="critical">เกือบหมด</option>
+                  <option value="depleted">หมดงบ</option>
+                </select>
+                <select id="sortFilter" class="filter-chip-select" aria-label="เรียงลำดับ">
+                  <option value="default">เรียงตามค่าเริ่มต้น</option>
+                  <option value="budget-desc">งบประมาณ มาก→น้อย</option>
+                  <option value="budget-asc">งบประมาณ น้อย→มาก</option>
+                  <option value="used-desc">เบิกจ่าย มาก→น้อย</option>
+                  <option value="used-asc">เบิกจ่าย น้อย→มาก</option>
+                  <option value="remaining-desc">คงเหลือ มาก→น้อย</option>
+                  <option value="remaining-asc">คงเหลือ น้อย→มาก</option>
+                  <option value="percent-desc">% การใช้ มาก→น้อย</option>
+                </select>
+              </div>
+            </div>
+            <div class="filter-toolbar-right">
+              <div class="filter-summary-inline">
+                <span id="filterResultCount" class="filter-count" aria-live="polite" aria-atomic="true">0 รายการ</span>
+                <span id="filterWarning" class="filter-warning-badge" style="display: none;" role="alert">
+                  <span id="warningCount">0</span> ใกล้หมด
                 </span>
               </div>
             </div>
-            <button class="btn btn-secondary" data-action="reset-filters" aria-label="ล้างตัวกรองทั้งหมด">
-              ล้างตัวกรอง
-            </button>
           </div>
 
-          <div class="search-grid">
-            <div class="search-field">
-              <label class="search-label" for="searchItemId">ค้นหา Item ID</label>
-              <input type="text" id="searchItemId" class="search-input" placeholder="เช่น BG69-001" aria-label="ค้นหา Item ID">
-            </div>
-
-            <div class="search-field">
-              <label class="search-label" for="searchItem">รายการ</label>
-              <input type="text" id="searchItem" class="search-input" placeholder="ชื่อรายการ" aria-label="ค้นหารายการ">
-            </div>
-
-            <div class="search-field">
-              <label class="search-label" for="searchWork">งาน</label>
-              <input type="text" id="searchWork" class="search-input" placeholder="ชื่องาน" aria-label="ค้นหางาน">
-            </div>
-
-            <div class="search-field">
-              <label class="search-label" for="searchDepartment">หน่วยงาน</label>
-              <input type="text" id="searchDepartment" class="search-input" placeholder="สำนัก/กอง" aria-label="ค้นหาหน่วยงาน">
+          <!-- Advanced filters (collapsed by default on mobile) -->
+          <div class="filter-advanced" id="filterAdvanced" style="display: none;">
+            <div class="search-grid">
+              <div class="search-field">
+                <label class="search-label" for="searchItem">รายการ</label>
+                <input type="text" id="searchItem" class="search-input" placeholder="ชื่อรายการ" aria-label="ค้นหารายการ">
+              </div>
+              <div class="search-field">
+                <label class="search-label" for="searchWork">งาน</label>
+                <input type="text" id="searchWork" class="search-input" placeholder="ชื่องาน" aria-label="ค้นหางาน">
+              </div>
+              <div class="search-field">
+                <label class="search-label" for="searchDepartment">หน่วยงาน</label>
+                <input type="text" id="searchDepartment" class="search-input" placeholder="สำนัก/กอง" aria-label="ค้นหาหน่วยงาน">
+              </div>
             </div>
           </div>
-
-          <div class="filter-controls">
-            <div class="filter-group">
-              <label class="filter-label" for="budgetStatusFilter">สถานะงบประมาณ</label>
-              <select id="budgetStatusFilter" class="filter-select" aria-label="ตัวกรองสถานะงบประมาณ">
-                <option value="all">ทั้งหมด</option>
-                <option value="available">ยังเหลืองบ (&lt;80%)</option>
-                <option value="warning">ใกล้หมดงบ (80-89%)</option>
-                <option value="critical">เกือบหมด (>=90%)</option>
-                <option value="depleted">หมดงบแล้ว</option>
-              </select>
-            </div>
-
-            <div class="filter-group">
-              <label class="filter-label" for="sortFilter">เรียงตาม</label>
-              <select id="sortFilter" class="filter-select" aria-label="เรียงลำดับ">
-                <option value="default">ค่าเริ่มต้น</option>
-                <option value="budget-desc">งบประมาณ (มาก-น้อย)</option>
-                <option value="budget-asc">งบประมาณ (น้อย-มาก)</option>
-                <option value="used-desc">เบิกจ่าย (มาก-น้อย)</option>
-                <option value="used-asc">เบิกจ่าย (น้อย-มาก)</option>
-                <option value="remaining-desc">คงเหลือ (มาก-น้อย)</option>
-                <option value="remaining-asc">คงเหลือ (น้อย-มาก)</option>
-                <option value="percent-desc">% การใช้ (มาก-น้อย)</option>
-              </select>
-            </div>
-          </div>
+          <button class="btn btn-ghost btn-xs filter-advanced-toggle" id="filterAdvancedToggle" aria-expanded="false" aria-controls="filterAdvanced">
+            ตัวกรองเพิ่มเติม
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
         </div>
 
         <div id="budgetContainer" class="budget-grid" style="display: none;" role="region" aria-label="รายการงบประมาณ" aria-live="polite"></div>
@@ -670,6 +667,62 @@
     switchSection(saved);
 
     console.log('Unified shell navigation initialized');
+  })();
+  </script>
+
+  <!-- Epic 4: Filter toolbar behavior -->
+  <script nonce="SSR2ii5fRwtNJngHlEUxow">
+  (function(){
+    'use strict';
+
+    // Advanced filter toggle
+    var toggleBtn = document.getElementById('filterAdvancedToggle');
+    var advancedPanel = document.getElementById('filterAdvanced');
+    if (toggleBtn && advancedPanel) {
+      toggleBtn.addEventListener('click', function() {
+        var expanded = this.getAttribute('aria-expanded') === 'true';
+        this.setAttribute('aria-expanded', String(!expanded));
+        if (expanded) {
+          advancedPanel.style.display = 'none';
+        } else {
+          advancedPanel.style.display = '';
+        }
+      });
+    }
+
+    // Unified search: searchItemId searches across ID, item, work, department
+    var searchInput = document.getElementById('searchItemId');
+    var searchItem = document.getElementById('searchItem');
+    var searchWork = document.getElementById('searchWork');
+    var searchDept = document.getElementById('searchDepartment');
+
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        var q = this.value.trim().toLowerCase();
+        // Mirror to individual fields if they exist (for backward compatibility)
+        if (searchItem && !searchItem.value) searchItem.value = '';
+        if (searchWork && !searchWork.value) searchWork.value = '';
+        if (searchDept && !searchDept.value) searchDept.value = '';
+        // Trigger filter
+        if (typeof window.applyFilters === 'function') {
+          clearTimeout(window._filterDebounce);
+          window._filterDebounce = setTimeout(function() { window.applyFilters(); }, 200);
+        }
+      });
+    }
+
+    // Close mobile sidebar when clicking overlay
+    var overlay = document.getElementById('sidebarOverlay');
+    var sidebar = document.getElementById('appSidebar');
+    if (overlay && sidebar) {
+      overlay.addEventListener('click', function() {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('open');
+        overlay.setAttribute('aria-hidden', 'true');
+        var toggle = document.getElementById('sidebarToggle');
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      });
+    }
   })();
   </script>
 </body>
