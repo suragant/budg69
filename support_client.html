@@ -235,7 +235,8 @@
     _tryLoad();
   }
 
-  // Lightweight delegation for support container events
+  // Lightweight delegation for support container events (record actions only)
+  // History actions are handled by installIntegratedHistoryPatch
   function bindSupportExpenseButtons(containerId){
     try{
       var cid = containerId || _resolveSupportContainerId();
@@ -250,67 +251,19 @@
         }
       }catch(e){}
 
-      // capture-phase diagnostic (non-invasive)
-      var captureHandler = function(e){
-        try{
-          var btn = e.target && e.target.closest && e.target.closest('[data-action], .record-btn, [data-id]');
-          if(!btn || !container.contains(btn)) return;
-          // keep non-invasive; used only for debugging if needed
-          // console.debug('support captureHandler saw', btn);
-        }catch(e){ console.warn('support captureHandler error', e); }
-      };
-
-      // bubble-phase: ensure history always triggers
+      // bubble-phase: record actions handled by inline handlers
       var bubbleHandler = function(e){
         try{
           var btn = e.target && e.target.closest && e.target.closest('[data-action], .record-btn, [data-id]');
           if(!btn || !container.contains(btn)) return;
-
-          // determine action, prefer data-action attribute
-          var action = (btn.getAttribute && (btn.getAttribute('data-action') || '').toLowerCase()) || '';
-          if (!action) {
-            // fallback: button text or class
-            var txt = (btn.innerText || btn.textContent || '').toLowerCase();
-            if (txt.indexOf('ประวัติ') !== -1 || txt.indexOf('history') !== -1) action = 'history';
-            else if (btn.classList && btn.classList.contains('record-btn')) action = 'record';
-          }
-
-          // If it's a history action, call openHistoryModal (normalized), always (robust)
-          if (action === 'view-history' || action === 'history') {
-            var id = (btn.getAttribute && (btn.getAttribute('data-id') || btn.getAttribute('data-item-id'))) || (btn.closest && btn.closest('.budget-card') && btn.closest('.budget-card').getAttribute('data-item-id')) || '';
-            if (!id) {
-              console.debug('support bubbleHandler: history clicked but no id found on button', btn);
-              return;
-            }
-            var norm = clientNormalizeItemId(id);
-            console.debug('support bubbleHandler: invoking history for', { raw:id, norm: norm });
-            // prefer dedicated history method
-            if (typeof openHistoryModal === 'function') {
-              try { openHistoryModal(norm); } catch(e){ console.warn('openHistoryModal threw', e); try { window.__support_on_btn && window.__support_on_btn(norm,'history'); }catch(_){} }
-            } else if (typeof window.openHistory === 'function') {
-              try { window.openHistory(norm); } catch(e){ console.warn('window.openHistory threw', e); try { window.__support_on_btn && window.__support_on_btn(norm,'history'); }catch(_){} }
-            } else {
-              // fallback to generic handler
-              try { window.__support_on_btn && window.__support_on_btn(norm,'history'); } catch(e){ console.warn('__support_on_btn history threw', e); }
-            }
-            // prevent double-processing by other handlers
-            try { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch(e){}
-            return;
-          }
-
-          // other actions: do nothing here (inline handlers handle record)
         }catch(e){ console.warn('support bubbleHandler error', e); }
       };
 
-      container.addEventListener('pointerdown', captureHandler, true);
-      container.addEventListener('touchstart', captureHandler, true);
       container.addEventListener('click', bubbleHandler, false);
 
       container._support_delegated = {
         attached: true,
         detach: function(){
-          try{ container.removeEventListener('pointerdown', captureHandler, true); }catch(e){}
-          try{ container.removeEventListener('touchstart', captureHandler, true); }catch(e){}
           try{ container.removeEventListener('click', bubbleHandler, false); }catch(e){}
           container._support_delegated = null;
         }
@@ -455,7 +408,6 @@
           var sel = [
             'button[data-action="open-history"]',
             'button[data-action="open_history"]',
-            'button[data-action="open-history"]',
             'button[data-action="history"]',
             'button[data-action="view-history"]',
             '.budget-card button'
