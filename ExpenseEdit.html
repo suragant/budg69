@@ -436,6 +436,7 @@
 
   var _editLogRow = null;
   var _cancelLogRow = null;
+  var _cancelIsTransfer = false;
 
   function fmtB(n) {
     return Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -522,11 +523,17 @@
       else if (kind.key === 'cancel') detailClass += ' is-cancel';
 
       var actionsHtml = '';
-      if (!isCancelled && kind.key !== 'transfer' && h.logRowIndex) {
-        actionsHtml = '<div class="tx-actions">' +
-          '<button type="button" class="tx-btn-edit" data-logrow="' + h.logRowIndex + '" data-amount="' + h.amount + '" data-date="' + (h.expenseDate || '') + '" data-desc="' + escapeHtml(normalizedDescription || '') + '">✏️ แก้ไข</button>' +
-          '<button type="button" class="tx-btn-cancel" data-logrow="' + h.logRowIndex + '" data-amount="' + h.amount + '">🗑️ ยกเลิก</button>' +
-          '</div>';
+      if (!isCancelled && h.logRowIndex) {
+        if (kind.key === 'transfer') {
+          actionsHtml = '<div class="tx-actions">' +
+            '<button type="button" class="tx-btn-cancel" data-logrow="' + h.logRowIndex + '" data-amount="' + h.amount + '" data-type="transfer">\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01\u0e42\u0e2d\u0e19\u0e07\u0e1a</button>' +
+            '</div>';
+        } else {
+          actionsHtml = '<div class="tx-actions">' +
+            '<button type="button" class="tx-btn-edit" data-logrow="' + h.logRowIndex + '" data-amount="' + h.amount + '" data-date="' + (h.expenseDate || '') + '" data-desc="' + escapeHtml(normalizedDescription || '') + '">\u270f\ufe0f \u0e41\u0e01\u0e49\u0e44\u0e02</button>' +
+            '<button type="button" class="tx-btn-cancel" data-logrow="' + h.logRowIndex + '" data-amount="' + h.amount + '">\ud83d\uddd1\ufe0f \u0e22\u0e01\u0e40\u0e25\u0e34\u0e01</button>' +
+            '</div>';
+        }
       }
 
       return '<section class="tx-card' + (isCancelled ? ' is-cancelled' : '') + '" style="border-left:4px solid ' + borderColor + ';">' +
@@ -627,22 +634,27 @@
           if (typeof showCustomAlert === 'function') showCustomAlert('✅ สำเร็จ', 'แก้ไขรายการเรียบร้อยแล้ว', 'success');
           _reloadAfterEdit();
         } else {
-          if (typeof showCustomAlert === 'function') showCustomAlert('❌ ผิดพลาด', (res && res.message) || 'เกิดข้อผิดพลาด', 'error');
+          if (typeof showCustomAlert === 'function') showCustomAlert('\u274c \u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14', (res && res.message) || '\u0e40\u0e01\u0e34\u0e14\u0e02\u0e49\u0e2d\u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14', 'error');
         }
       })
       .catch(function (err) {
-        setLoading('editExpenseSave', false, '💾 บันทึก');
-        if (typeof showCustomAlert === 'function') showCustomAlert('❌ ผิดพลาด', String(err), 'error');
+        setLoading('editExpenseSave', false, '\ud83d\udcb0 \u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01');
+        if (typeof showCustomAlert === 'function') showCustomAlert('\u274c \u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14', String(err), 'error');
       });
   });
 
   function openCancelModal(btn) {
     _cancelLogRow = Number(btn.getAttribute('data-logrow'));
     if (!_cancelLogRow) return;
+    _cancelIsTransfer = btn.getAttribute('data-type') === 'transfer';
     var amt = Number(btn.getAttribute('data-amount') || 0);
-    $('cancelExpenseInfo').textContent = 'รายการ #' + _cancelLogRow + ' จำนวน ' + fmtB(amt) + ' บาท จะถูกยกเลิก และยอดงบประมาณจะถูกคืนกลับอัตโนมัติ';
+    if (_cancelIsTransfer) {
+      $('cancelExpenseInfo').textContent = 'รายการโอนงบ #' + _cancelLogRow + ' จำนวน ' + fmtB(Math.abs(amt)) + ' บาท จะถูกยกเลิก และงบประมาณจะถูกคืนกลับอัตโนมัติ';
+    } else {
+      $('cancelExpenseInfo').textContent = 'รายการ #' + _cancelLogRow + ' จำนวน ' + fmtB(amt) + ' บาท จะถูกยกเลิก และยอดงบประมาณจะถูกคืนกลับอัตโนมัติ';
+    }
     $('cancelReason').value = '';
-    $('cancelExpenseConfirm').textContent = '🗑️ ยืนยันยกเลิก';
+    $('cancelExpenseConfirm').textContent = '\ud83d\uddd1\ufe0f \u0e22\u0e37\u0e19\u0e22\u0e31\u0e19\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01';
     $('cancelExpenseConfirm').disabled = false;
     if (typeof window.openModal === 'function') window.openModal('cancelExpenseModal', { keepOthers: true, zIndex: 20000 });
     else $('cancelExpenseModal').classList.add('active');
@@ -653,6 +665,7 @@
     if (typeof window.closeModal === 'function') window.closeModal('cancelExpenseModal');
     else $('cancelExpenseModal').classList.remove('active');
     _cancelLogRow = null;
+    _cancelIsTransfer = false;
   }
 
   $('cancelExpenseClose').addEventListener('click', closeCancelModal);
@@ -663,27 +676,30 @@
   $('cancelExpenseConfirm').addEventListener('click', function () {
     if (!_cancelLogRow) return;
     var reason = $('cancelReason').value.trim();
-    if (!reason) {
-      if (typeof showCustomAlert === 'function') showCustomAlert('แจ้งเตือน', 'กรุณาระบุเหตุผลการยกเลิก', 'info');
+    if (!reason && !_cancelIsTransfer) {
+      if (typeof showCustomAlert === 'function') showCustomAlert('\u0e41\u0e08\u0e49\u0e07\u0e40\u0e15\u0e37\u0e2d\u0e19', '\u0e01\u0e23\u0e38\u0e13\u0e32\u0e23\u0e30\u0e1a\u0e38\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e01\u0e32\u0e23\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01', 'info');
       return;
     }
 
-    setLoading('cancelExpenseConfirm', true, '🗑️ ยืนยันยกเลิก');
+    setLoading('cancelExpenseConfirm', true, '\ud83d\uddd1\ufe0f \u0e22\u0e37\u0e19\u0e22\u0e31\u0e19\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01');
 
-    callExpenseRpc('cancelExpense', [_cancelLogRow, reason])
+    var rpcFn = _cancelIsTransfer ? 'reverseTransfer' : 'cancelExpense';
+    var rpcArgs = _cancelIsTransfer ? [_cancelLogRow] : [_cancelLogRow, reason];
+
+    callExpenseRpc(rpcFn, rpcArgs)
       .then(function (res) {
-        setLoading('cancelExpenseConfirm', false, '🗑️ ยืนยันยกเลิก');
+        setLoading('cancelExpenseConfirm', false, '\ud83d\uddd1\ufe0f \u0e22\u0e37\u0e19\u0e22\u0e31\u0e19\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01');
         if (res && res.success) {
           closeCancelModal();
-          if (typeof showCustomAlert === 'function') showCustomAlert('✅ สำเร็จ', 'ยกเลิกรายการเรียบร้อยแล้ว', 'success');
+          if (typeof showCustomAlert === 'function') showCustomAlert('\u2705 \u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08', '\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e40\u0e23\u0e35\u0e22\u0e1a\u0e23\u0e49\u0e2d\u0e22\u0e41\u0e25\u0e49\u0e27', 'success');
           _reloadAfterEdit();
         } else {
-          if (typeof showCustomAlert === 'function') showCustomAlert('❌ ผิดพลาด', (res && res.message) || 'เกิดข้อผิดพลาด', 'error');
+          if (typeof showCustomAlert === 'function') showCustomAlert('\u274c \u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14', (res && res.message) || '\u0e40\u0e01\u0e34\u0e14\u0e02\u0e49\u0e2d\u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14', 'error');
         }
       })
       .catch(function (err) {
-        setLoading('cancelExpenseConfirm', false, '🗑️ ยืนยันยกเลิก');
-        if (typeof showCustomAlert === 'function') showCustomAlert('❌ ผิดพลาด', String(err), 'error');
+        setLoading('cancelExpenseConfirm', false, '\ud83d\uddd1\ufe0f \u0e22\u0e37\u0e19\u0e22\u0e31\u0e19\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01');
+        if (typeof showCustomAlert === 'function') showCustomAlert('\u274c \u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14', String(err), 'error');
       });
   });
 

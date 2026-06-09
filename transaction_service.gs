@@ -524,3 +524,127 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
     try { lock.releaseLock(); } catch (e) {}
   }
 }
+
+function reverseTransfer(logRowIndex) {
+  const currentUser = getUserPermission();
+  if (!currentUser) return createResponse(false, 'ไม่พบข้อมูลผู้ใช้');
+  if (!logRowIndex || typeof logRowIndex !== 'number') return createResponse(false, 'ไม่ระบุ logRowIndex');
+
+  const lock = acquireLockWithRetry();
+  if (!lock) return createResponse(false, 'ระบบกำลังประมวลผล กรุณาลองใหม่');
+
+  try {
+    const logContext = getTransactionLogContext();
+    if (!logContext) return createResponse(false, 'ไม่พบ Transaction Log');
+
+    const logSheet = logContext.sheet;
+    const logCols = logContext.logCols;
+    const logRow = logSheet.getRange(logRowIndex, 1, 1, logContext.lastCol).getValues()[0];
+    const logEntry = getTransactionLogRowModel(logRow, logCols, logRowIndex);
+
+    const entryType = (logEntry.type || '').toUpperCase();
+    if (entryType !== 'TRANSFER_OUT' && entryType !== 'TRANSFER_IN') {
+      return createResponse(false, 'รายการนี้ไม่ใช่รายการโอนงบ');
+    }
+
+    const absAmount = Math.abs(logEntry.amount);
+    if (absAmount <= 0) return createResponse(false, 'จำนวนเงินไม่ถูกต้อง');
+
+    // Parse description for both item IDs: [TRANSFER] reason (FROM → TO)
+    const desc = logEntry.description || '';
+    const descMatch = desc.match(/\((.+?)\s*→\s*(.+?)\)/);
+    if (!descMatch) return createResponse(false, 'ไม่พบข้อมูลรายการโอนในคำอธิบาย');
+
+    const fromId = normalizeItemId(descMatch[1].trim());
+    const toId = normalizeItemId(descMatch[2].trim());
+    if (!fromId || !toId) return createResponse(false, 'ไม่พบ Item ID ในรายการ');
+
+    const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
+    if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
+
+    const allData = budgetSheet.getDataRange().getValues();
+    const cols = getColumnIndices(allData[0]);
+    if (cols.budget === -1 || cols.used === -1 || cols.remaining === -1) {
+      return createResponse(false, 'ไม่พบคอลัมน์ที่จำเป็น');
+    }
+
+    const foundRows = findBudgetRowIndicesByItemIds([fromId, toId], allData, cols);
+    const fromRow = foundRows[fromId.toUpperCase()];
+    const toRow = foundRows[toId.toUpperCase()];
+    if (!fromRow) return createResponse(false, 'ไม่พบ Item ID ต้นทาง: ' + fromId);
+    if (!toRow)   return createResponse(false, 'ไม่พบ Item ID ปลายทาง: ' + toId);
+
+    const fromVals = allData[fromRow - 1];
+    const toVals   = allData[toRow - 1];
+
+    const fromCurBudget = parseNumberSafe(fromVals[cols.budget]);
+    const fromCurUsed   = parseNumberSafe(fromVals[cols.used]);
+    const toCurBudget   = parseNumberSafe(toVals[cols.budget]);
+    const toCurUsed     = parseNumberSafe(toVals[cols.used]);
+
+    // Reverse: source gets budget back, destination loses budget
+    const fromNewBudget = parseFloat((fromCurBudget + absAmount).toFixed(2));
+    const fromNewRemaining = parseFloat((fromNewBudget - fromCurUsed).toFixed(2));
+    const toNewBudget = parseFloat((toCurBudget - absAmount).toFixed(2));
+    const toNewRemaining = parseFloat((toNewBudget - toCurUsed).toFixed(2));
+
+    if (toNewBudget < 0) return createResponse(false, 'งบประมาณปลายทางจะติดลบหลังยกเลิก');
+    if (toNewRemaining < 0) return createResponse(false, 'ยอดเบิกจ่ายปลายทางมากกว่างบที่จะคืน');
+
+    function writeBudgetRow(budgetSheet, rowIdx, newBudget, newRemaining, cols) {
+      if (Math.abs(cols.budget - cols.remaining) === 1) {
+        const startCol = Math.min(cols.budget, cols.remaining) + 1;
+        budgetSheet.getRange(rowIdx, startCol, 1, 2).setValues([
+          cols.budget < cols.remaining ? [newBudget, newRemaining] : [newRemaining, newBudget]
+        ]);
+      } else {
+        budgetSheet.getRange(rowIdx, cols.budget + 1).setValue(newBudget);
+        budgetSheet.getRange(rowIdx, cols.remaining + 1).setValue(newRemaining);
+      }
+    }
+
+    writeBudgetRow(budgetSheet, fromRow, fromNewBudget, fromNewRemaining, cols);
+    writeBudgetRow(budgetSheet, toRow,   toNewBudget,   toNewRemaining,   cols);
+
+    // Find sibling entry and mark both as CANCELLED
+    const siblingType = entryType === 'TRANSFER_OUT' ? 'TRANSFER_IN' : 'TRANSFER_OUT';
+    const allLogData = logSheet.getDataRange().getValues();
+    const siblingRows = [];
+
+    for (let i = 1; i < allLogData.length; i++) {
+      const row = allLogData[i];
+      const rType = (row[logCols.type] || '').toUpperCase();
+      if (rType !== siblingType) continue;
+      const rDesc = String(row[5] || '');
+      if (rDesc !== desc) continue;
+      siblingRows.push(i + 1);
+    }
+
+    // Mark the clicked entry as CANCELLED
+    if (logCols.status !== -1) logSheet.getRange(logRowIndex, logCols.status + 1).setValue('CANCELLED');
+    if (logCols.editedBy !== -1) logSheet.getRange(logRowIndex, logCols.editedBy + 1).setValue(currentUser.email);
+
+    // Mark sibling entries as CANCELLED
+    siblingRows.forEach(function(sibRow) {
+      if (logCols.status !== -1) logSheet.getRange(sibRow, logCols.status + 1).setValue('CANCELLED');
+      if (logCols.editedBy !== -1) logSheet.getRange(sibRow, logCols.editedBy + 1).setValue(currentUser.email);
+    });
+
+    // Log reversal entry
+    const note = '[REVERSE_TRANSFER] ยกเลิกรายการ row ' + logRowIndex
+      + ' (' + fromId + ' ↔ ' + toId + ')';
+    logTransaction(fromId, 0, note, new Date(), fromCurUsed, fromNewRemaining, 'REVERSAL', 0, 'ACTIVE', currentUser.email);
+
+    return createResponse(true, 'ยกเลิกรายการโอนงบสำเร็จ', {
+      from: { itemId: fromId, newBudget: fromNewBudget, newRemaining: fromNewRemaining },
+      to:   { itemId: toId,   newBudget: toNewBudget,   newRemaining: toNewRemaining },
+      amount: absAmount, reversedBy: currentUser.email, timestamp: new Date().toISOString()
+    });
+
+  } catch (err) {
+    handleError('reverseTransfer', err, { logRowIndex });
+    return createResponse(false, 'เกิดข้อผิดพลาด: ' + err.toString());
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
