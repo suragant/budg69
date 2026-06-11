@@ -243,14 +243,13 @@ function getTransactionHistory(itemId) {
     const isSupportItem = String(itemId).toUpperCase().indexOf('SP') === 0;
     if (isSupportItem) {
       const sRow = findRowIndexInSheetSupport(inputId);
-      if (sRow) {
-        const supportSheet = resolveSheet(SUPPORT_SHEET_NAME);
-        const sHeaders = supportSheet.getRange(1, 1, 1, supportSheet.getLastColumn()).getValues()[0];
-        const sMap = mapSupportColumns(sHeaders);
-        const sVals = supportSheet.getRange(sRow, 1, 1, supportSheet.getLastColumn()).getValues()[0];
-        const dept = _isValidIndex(sMap.department) ? String(sVals[sMap.department] || '').trim() : '';
-        if (dept && !hasAccessToRow(currentUser, dept)) return [];
-      }
+      if (!sRow) return []; // Item not found in source sheet — deny access
+      const supportSheet = resolveSheet(SUPPORT_SHEET_NAME);
+      const sHeaders = supportSheet.getRange(1, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+      const sMap = mapSupportColumns(sHeaders);
+      const sVals = supportSheet.getRange(sRow, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+      const dept = _isValidIndex(sMap.department) ? String(sVals[sMap.department] || '').trim() : '';
+      if (dept && !hasAccessToRow(currentUser, dept)) return [];
     } else {
       const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
       if (budgetSheet) {
@@ -258,11 +257,10 @@ function getTransactionHistory(itemId) {
         const cols = getColumnIndices(allData[0]);
         const foundRows = findBudgetRowIndicesByItemIds([inputId], allData, cols);
         const budgetRow = foundRows[inputId.toUpperCase()];
-        if (budgetRow !== null && budgetRow !== undefined) {
-          const rowData = allData[budgetRow - 1];
-          const dept = cols.department !== -1 ? String(rowData[cols.department] || '').trim() : '';
-          if (dept && !hasAccessToRow(currentUser, dept)) return [];
-        }
+        if (!budgetRow) return []; // Item not found in source sheet — deny access
+        const rowData = allData[budgetRow - 1];
+        const dept = cols.department !== -1 ? String(rowData[cols.department] || '').trim() : '';
+        if (dept && !hasAccessToRow(currentUser, dept)) return [];
       }
     }
 
@@ -511,8 +509,9 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate, new
       // Compute quantity diff
       let newUsedQty = null;
       if (_isValidIndex(sMap.usedQty)) {
+        const hasNewQuantity = newQuantity !== undefined;
         const oldQty = parseNumberSafe(logEntry.quantity || 0);
-        const newQty = parseNumberSafe(newQuantity || 0);
+        const newQty = hasNewQuantity ? parseNumberSafe(newQuantity) : oldQty;
         const qtyDiff = newQty - oldQty;
         const currentQty = parseNumberSafe(sVals[sMap.usedQty] || 0);
         newUsedQty = parseFloat((currentQty + qtyDiff).toFixed(2));
@@ -561,7 +560,10 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate, new
     const finalDesc = newDescription || originalDesc;
     const note = `[EDIT] row ${logRowIndex} | เดิม ${oldAmount} -> ใหม่ ${amt} | ${finalDesc}`;
 
-    const finalQuantity = isSupportItem ? parseNumberSafe(newQuantity || 0) : 0;
+    const hasNewQuantity = newQuantity !== undefined;
+    const finalQuantity = isSupportItem
+      ? (hasNewQuantity ? parseNumberSafe(newQuantity) : parseNumberSafe(logEntry.quantity || 0))
+      : 0;
 
     logTransaction(
       itemId,
