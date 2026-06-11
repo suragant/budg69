@@ -399,6 +399,9 @@
  
     <label class="ee-label" for="editAmount">จำนวนเงิน (บาท) *</label>
     <input class="ee-input" type="number" id="editAmount" min="0.01" step="0.01">
+
+    <label class="ee-label" for="editQuantity">จำนวนหน่วย</label>
+    <input class="ee-input" type="number" id="editQuantity" min="0" step="0.01" placeholder="0 หรือปล่อยว่าง">
  
     <label class="ee-label" for="editDate">วันที่เบิกจ่าย</label>
     <input class="ee-input" type="date" id="editDate">
@@ -530,7 +533,7 @@
             '</div>';
         } else {
           actionsHtml = '<div class="tx-actions">' +
-            '<button type="button" class="tx-btn-edit" data-logrow="' + h.logRowIndex + '" data-amount="' + h.amount + '" data-date="' + (h.expenseDate || '') + '" data-desc="' + escapeHtml(normalizedDescription || '') + '">\u270f\ufe0f \u0e41\u0e01\u0e49\u0e44\u0e02</button>' +
+            '<button type="button" class="tx-btn-edit" data-logrow="' + h.logRowIndex + '" data-amount="' + h.amount + '" data-date="' + (h.expenseDate || '') + '" data-desc="' + escapeHtml(normalizedDescription || '') + '" data-qty="' + (h.quantity || 0) + '">\u270f\ufe0f \u0e41\u0e01\u0e49\u0e44\u0e02</button>' +
             '<button type="button" class="tx-btn-cancel" data-logrow="' + h.logRowIndex + '" data-amount="' + h.amount + '">\ud83d\uddd1\ufe0f \u0e22\u0e01\u0e40\u0e25\u0e34\u0e01</button>' +
             '</div>';
         }
@@ -594,6 +597,7 @@
     $('editAmount').value = btn.getAttribute('data-amount') || '';
     $('editDate').value = btn.getAttribute('data-date') || '';
     $('editDescription').value = btn.getAttribute('data-desc') || '';
+    $('editQuantity').value = btn.getAttribute('data-qty') || '0';
     $('editExpenseInfo').textContent = 'แก้ไขรายการ #' + _editLogRow;
     $('editExpenseSave').textContent = '💾 บันทึก';
     $('editExpenseSave').disabled = false;
@@ -618,6 +622,8 @@
     var amt = parseFloat($('editAmount').value);
     var date = $('editDate').value;
     var desc = $('editDescription').value.trim();
+    var qtyRaw = parseFloat($('editQuantity').value);
+    var qty = (isNaN(qtyRaw) || qtyRaw < 0) ? 0 : qtyRaw;
 
     if (isNaN(amt) || amt <= 0) {
       if (typeof showCustomAlert === 'function') showCustomAlert('แจ้งเตือน', 'จำนวนเงินต้องมากกว่า 0', 'info');
@@ -626,7 +632,7 @@
 
     setLoading('editExpenseSave', true, '💾 บันทึก');
 
-    callExpenseRpc('editExpense', [_editLogRow, amt, desc, date])
+    callExpenseRpc('editExpense', [_editLogRow, amt, desc, date, qty])
       .then(function (res) {
         setLoading('editExpenseSave', false, '💾 บันทึก');
         if (res && res.success) {

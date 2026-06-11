@@ -149,6 +149,10 @@ function findRowIndexInSheetSupport(itemId) {
 }
 
 function recordSupportExpenseSupport(itemId, amount, description, expenseDate, quantity) {
+  const currentUser = getUserPermission();
+  if (!currentUser) return createResponse(false, 'ไม่พบข้อมูลผู้ใช้');
+  if (currentUser.role === 'viewer') return createResponse(false, 'ไม่มีสิทธิ์บันทึกรายการ');
+
   const lock = acquireLockWithRetry();
   try {
     if (!lock) {
@@ -173,14 +177,19 @@ function recordSupportExpenseSupport(itemId, amount, description, expenseDate, q
     }
 
     const rowVals = sheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0];
+    const dept = String(rowVals[map.department] || '').trim();
+    if (dept && !hasAccessToRow(currentUser, dept)) {
+      return createResponse(false, 'คุณไม่มีสิทธิ์เบิกจ่ายจากหน่วยงานนี้');
+    }
+
     const addQty = parseNumberSafe(quantity || 0);
     const addAmt = parseNumberSafe(amount || 0);
 
+    // Compute all new values before writing
     let newUsedQty = null;
     if (_isValidIndex(map.usedQty)) {
       const currentQty = parseNumberSafe(rowVals[map.usedQty] || 0);
       newUsedQty = Number((currentQty + addQty).toFixed(2));
-      sheet.getRange(rowIndex, map.usedQty + 1).setValue(newUsedQty);
     }
 
     let newUsedMoney = null;
@@ -194,9 +203,15 @@ function recordSupportExpenseSupport(itemId, amount, description, expenseDate, q
       }
       newUsedMoney = calc.newUsed;
       newRemainingMoney = calc.newRemaining;
-      sheet.getRange(rowIndex, map.usedMoney + 1).setValue(newUsedMoney);
+    }
 
-      if (_isValidIndex(map.budgetMoney) && _isValidIndex(map.remainingMoney)) {
+    // All validations passed — write now
+    if (_isValidIndex(map.usedQty) && newUsedQty !== null) {
+      sheet.getRange(rowIndex, map.usedQty + 1).setValue(newUsedQty);
+    }
+    if (_isValidIndex(map.usedMoney) && newUsedMoney !== null) {
+      sheet.getRange(rowIndex, map.usedMoney + 1).setValue(newUsedMoney);
+      if (_isValidIndex(map.remainingMoney)) {
         sheet.getRange(rowIndex, map.remainingMoney + 1).setValue(newRemainingMoney);
       }
     }
@@ -224,6 +239,8 @@ function recordSupportExpenseSupport(itemId, amount, description, expenseDate, q
 
 function getSupportQuarterlyReport(year, fiscalStartMonth) {
   try {
+    const currentUser = getUserPermission();
+    if (!currentUser) return createResponse(false, 'ไม่พบข้อมูลผู้ใช้');
     year = Number(year) || (new Date()).getFullYear();
     fiscalStartMonth = Number(fiscalStartMonth) || 10;
 

@@ -221,6 +221,8 @@ function checkBudgetAlerts() {
 
 function getBudgetAlertRecipients() {
   try {
+    const currentUser = getUserPermission();
+    if (!currentUser) return [];
     const usersSheet = resolveSheet(CONFIG.SHEETS.USERS);
     if (!usersSheet) return [];
     const data = usersSheet.getDataRange().getValues();

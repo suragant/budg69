@@ -234,6 +234,8 @@ function logTransaction(itemId, amount, description, expenseDate, newUsed, newRe
 
 function getTransactionHistory(itemId) {
   try {
+    const currentUser = getUserPermission();
+    if (!currentUser) return [];
     const inputId = normalizeItemId(itemId || '');
     if (!inputId) return [];
     const logContext = getTransactionLogContext();
@@ -340,13 +342,28 @@ function cancelExpense(logRowIndex, reason) {
       const sRow = findRowIndexInSheetSupport(itemId);
       if (!sRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
       const sVals = supportSheet.getRange(sRow, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+
+      // Compute all new values before writing
+      const logQty = parseNumberSafe(logEntry.quantity || 0);
+      let newUsedQty = null;
+      if (_isValidIndex(sMap.usedQty) && logQty > 0) {
+        const currentQty = parseNumberSafe(sVals[sMap.usedQty] || 0);
+        newUsedQty = parseFloat((currentQty - logQty).toFixed(2));
+        if (newUsedQty < 0) return createResponse(false, 'ไม่สามารถ reverse ได้: ยอด quantity จะติดลบ');
+      }
+
       currentUsed = _isValidIndex(sMap.usedMoney) ? parseNumberSafe(sVals[sMap.usedMoney] || 0) : 0;
       budget = _isValidIndex(sMap.budgetMoney) ? parseNumberSafe(sVals[sMap.budgetMoney] || 0) : 0;
       newUsed = parseFloat((currentUsed - amount).toFixed(2));
       newRemaining = parseFloat((budget - newUsed).toFixed(2));
       if (newUsed < 0) return createResponse(false, 'ไม่สามารถ reverse ได้: ยอด used จะติดลบ');
+
+      // All validations passed — write now
       if (_isValidIndex(sMap.usedMoney)) supportSheet.getRange(sRow, sMap.usedMoney + 1).setValue(newUsed);
       if (_isValidIndex(sMap.remainingMoney)) supportSheet.getRange(sRow, sMap.remainingMoney + 1).setValue(newRemaining);
+      if (_isValidIndex(sMap.usedQty) && newUsedQty !== null) {
+        supportSheet.getRange(sRow, sMap.usedQty + 1).setValue(newUsedQty);
+      }
       sheet = supportSheet;
       row = sRow;
     } else {
@@ -407,7 +424,7 @@ function cancelExpense(logRowIndex, reason) {
   }
 }
 
-function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
+function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate, newQuantity) {
   const currentUser = getUserPermission();
   if (!currentUser) return createResponse(false, 'ไม่พบข้อมูลผู้ใช้');
   if (!logRowIndex || typeof logRowIndex !== 'number') return createResponse(false, 'ไม่ระบุ logRowIndex');
@@ -454,14 +471,32 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate) {
       const sRow = findRowIndexInSheetSupport(itemId);
       if (!sRow) return createResponse(false, 'ไม่พบ Item ID: ' + itemId);
       const sVals = supportSheet.getRange(sRow, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+
+      // Compute money diff
       const currentUsed = _isValidIndex(sMap.usedMoney) ? parseNumberSafe(sVals[sMap.usedMoney] || 0) : 0;
       const budget = _isValidIndex(sMap.budgetMoney) ? parseNumberSafe(sVals[sMap.budgetMoney] || 0) : 0;
       newUsed = parseFloat((currentUsed + diff).toFixed(2));
       newRemaining = parseFloat((budget - newUsed).toFixed(2));
       if (newUsed < 0) return createResponse(false, 'ยอดที่แก้ไขทำให้ยอด used ติดลบ');
       if (newRemaining < 0) return createResponse(false, 'ยอดเบิกจ่ายเกินงบประมาณที่ตั้งไว้');
+
+      // Compute quantity diff
+      let newUsedQty = null;
+      if (_isValidIndex(sMap.usedQty)) {
+        const oldQty = parseNumberSafe(logEntry.quantity || 0);
+        const newQty = parseNumberSafe(newQuantity || 0);
+        const qtyDiff = newQty - oldQty;
+        const currentQty = parseNumberSafe(sVals[sMap.usedQty] || 0);
+        newUsedQty = parseFloat((currentQty + qtyDiff).toFixed(2));
+        if (newUsedQty < 0) return createResponse(false, 'ยอดที่แก้ไขทำให้จำนวนหน่วยติดลบ');
+      }
+
+      // All validations passed — write now
       if (_isValidIndex(sMap.usedMoney)) supportSheet.getRange(sRow, sMap.usedMoney + 1).setValue(newUsed);
       if (_isValidIndex(sMap.remainingMoney)) supportSheet.getRange(sRow, sMap.remainingMoney + 1).setValue(newRemaining);
+      if (_isValidIndex(sMap.usedQty) && newUsedQty !== null) {
+        supportSheet.getRange(sRow, sMap.usedQty + 1).setValue(newUsedQty);
+      }
     } else {
       const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
       if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
@@ -542,6 +577,15 @@ function reverseTransfer(logRowIndex) {
     const logRow = logSheet.getRange(logRowIndex, 1, 1, logContext.lastCol).getValues()[0];
     const logEntry = getTransactionLogRowModel(logRow, logCols, logRowIndex);
 
+    // Reject if already cancelled
+    if (logEntry.status === 'CANCELLED') return createResponse(false, 'รายการนี้ถูกยกเลิกไปแล้ว');
+
+    // Owner/admin authorization check
+    const isOwner = logEntry.user.toLowerCase() === currentUser.email.toLowerCase();
+    if (!isOwner && currentUser.role !== 'admin') {
+      return createResponse(false, 'คุณไม่มีสิทธิ์ยกเลิกรายการของผู้อื่น');
+    }
+
     const entryType = (logEntry.type || '').toUpperCase();
     if (entryType !== 'TRANSFER_OUT' && entryType !== 'TRANSFER_IN') {
       return createResponse(false, 'รายการนี้ไม่ใช่รายการโอนงบ');
@@ -558,6 +602,21 @@ function reverseTransfer(logRowIndex) {
     const fromId = normalizeItemId(descMatch[1].trim());
     const toId = normalizeItemId(descMatch[2].trim());
     if (!fromId || !toId) return createResponse(false, 'ไม่พบ Item ID ในรายการ');
+
+    // Check sibling entry is not already cancelled
+    const siblingType = entryType === 'TRANSFER_OUT' ? 'TRANSFER_IN' : 'TRANSFER_OUT';
+    const allLogData = logSheet.getDataRange().getValues();
+    const siblingRows = [];
+    for (let i = 1; i < allLogData.length; i++) {
+      const row = allLogData[i];
+      const rType = (row[logCols.type] || '').toUpperCase();
+      if (rType !== siblingType) continue;
+      const rDesc = String(row[5] || '');
+      if (rDesc !== desc) continue;
+      const rStatus = logCols.status !== -1 ? String(row[logCols.status] || '').toUpperCase() : '';
+      if (rStatus === 'CANCELLED') return createResponse(false, 'รายการคู่โอนถูกยกเลิกไปแล้ว');
+      siblingRows.push(i + 1);
+    }
 
     const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
     if (!budgetSheet) return createResponse(false, 'ไม่พบ Sheet งบประมาณ');
@@ -605,20 +664,6 @@ function reverseTransfer(logRowIndex) {
 
     writeBudgetRow(budgetSheet, fromRow, fromNewBudget, fromNewRemaining, cols);
     writeBudgetRow(budgetSheet, toRow,   toNewBudget,   toNewRemaining,   cols);
-
-    // Find sibling entry and mark both as CANCELLED
-    const siblingType = entryType === 'TRANSFER_OUT' ? 'TRANSFER_IN' : 'TRANSFER_OUT';
-    const allLogData = logSheet.getDataRange().getValues();
-    const siblingRows = [];
-
-    for (let i = 1; i < allLogData.length; i++) {
-      const row = allLogData[i];
-      const rType = (row[logCols.type] || '').toUpperCase();
-      if (rType !== siblingType) continue;
-      const rDesc = String(row[5] || '');
-      if (rDesc !== desc) continue;
-      siblingRows.push(i + 1);
-    }
 
     // Mark the clicked entry as CANCELLED
     if (logCols.status !== -1) logSheet.getRange(logRowIndex, logCols.status + 1).setValue('CANCELLED');
