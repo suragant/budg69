@@ -561,6 +561,8 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate, new
     const finalDesc = newDescription || originalDesc;
     const note = `[EDIT] row ${logRowIndex} | เดิม ${oldAmount} -> ใหม่ ${amt} | ${finalDesc}`;
 
+    const finalQuantity = isSupportItem ? parseNumberSafe(newQuantity || 0) : 0;
+
     logTransaction(
       itemId,
       amt,
@@ -569,7 +571,7 @@ function editExpense(logRowIndex, newAmount, newDescription, newExpenseDate, new
       newUsed,
       newRemaining,
       'EDIT',
-      0,
+      finalQuantity,
       'ACTIVE',
       currentUser.email
     );
