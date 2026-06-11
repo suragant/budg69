@@ -258,9 +258,12 @@ function getSupportQuarterlyReport(year, fiscalStartMonth) {
       const row = data[r] || [];
       const idRaw = _isValidIndex(map.itemId) ? row[map.itemId] : row[0] || '';
       const id = normalizeItemId(idRaw);
+      const dept = _isValidIndex(map.department) ? (row[map.department] || '') : '';
+      // Skip items the user cannot access
+      if (dept && !hasAccessToRow(currentUser, dept)) continue;
       itemsMap[id] = normalizeSupportItemModel({
         itemId: id,
-        department: _isValidIndex(map.department) ? (row[map.department] || '') : '',
+        department: dept,
         work: _isValidIndex(map.area) ? (row[map.area] || '') : '',
         budgetType: _isValidIndex(map.budgetCategory) ? (row[map.budgetCategory] || '') : '',
         expenseType: _isValidIndex(map.expenseType) ? (row[map.expenseType] || '') : '',
@@ -296,21 +299,7 @@ function getSupportQuarterlyReport(year, fiscalStartMonth) {
             const amt = parseNumberSafe(entry.amount);
 
             let meta = itemsMap[itemId];
-            if (!meta) {
-              meta = normalizeSupportItemModel({
-                itemId: itemId,
-                department: 'ไม่ระบุ',
-                work: 'ไม่ระบุ',
-                budgetType: 'ไม่ระบุ',
-                expenseType: 'ไม่ระบุ',
-                item: '',
-                budget: 0,
-                used: 0,
-                remaining: 0,
-                quarters: { Q1: 0, Q2: 0, Q3: 0, Q4: 0 }
-              });
-              itemsMap[itemId] = meta;
-            }
+            if (!meta) continue;
 
             meta.quarters[qName] = (meta.quarters[qName] || 0) + amt;
 

@@ -238,6 +238,34 @@ function getTransactionHistory(itemId) {
     if (!currentUser) return [];
     const inputId = normalizeItemId(itemId || '');
     if (!inputId) return [];
+
+    // Resolve department for the item to check access
+    const isSupportItem = String(itemId).toUpperCase().indexOf('SP') === 0;
+    if (isSupportItem) {
+      const sRow = findRowIndexInSheetSupport(inputId);
+      if (sRow) {
+        const supportSheet = resolveSheet(SUPPORT_SHEET_NAME);
+        const sHeaders = supportSheet.getRange(1, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+        const sMap = mapSupportColumns(sHeaders);
+        const sVals = supportSheet.getRange(sRow, 1, 1, supportSheet.getLastColumn()).getValues()[0];
+        const dept = _isValidIndex(sMap.department) ? String(sVals[sMap.department] || '').trim() : '';
+        if (dept && !hasAccessToRow(currentUser, dept)) return [];
+      }
+    } else {
+      const budgetSheet = resolveSheet(CONFIG.SHEETS.BUDGET);
+      if (budgetSheet) {
+        const allData = budgetSheet.getDataRange().getValues();
+        const cols = getColumnIndices(allData[0]);
+        const foundRows = findBudgetRowIndicesByItemIds([inputId], allData, cols);
+        const budgetRow = foundRows[inputId.toUpperCase()];
+        if (budgetRow !== null && budgetRow !== undefined) {
+          const rowData = allData[budgetRow - 1];
+          const dept = cols.department !== -1 ? String(rowData[cols.department] || '').trim() : '';
+          if (dept && !hasAccessToRow(currentUser, dept)) return [];
+        }
+      }
+    }
+
     const logContext = getTransactionLogContext();
     if (!logContext) return [];
     const data = logContext.sheet.getDataRange().getValues();
